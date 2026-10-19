@@ -1,0 +1,18 @@
+# Nextflow runtime
+work/
+.nextflow/
+.nextflow.log*
+.conda_envs/
+
+# Outputs
+results/
+results_test/
+
+# Large data (keep raw reads and databases out of git)
+*.fastq.gz
+*.fq.gz
+*.dmnd
+!tests/data/*
+
+.DS_Store
+__pycache__/
