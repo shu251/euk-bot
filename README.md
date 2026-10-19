@@ -49,7 +49,7 @@ python3 bin/make_samplesheet.py /path/to/raw-reads -o samplesheet.csv -n 3
 ```
 
 ```bash
-nextflow run main.nf -profile slurm,mamba \
+nextflow run main.nf -profile slurm,conda \
     --input samplesheet.csv \
     --outdir results \
     --sortmerna_db '/path/to/rRNA_databases/*.fasta' \

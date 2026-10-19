@@ -22,7 +22,7 @@ shift 2
 
 module purge
 module load Nextflow/25.10.2
-module load Miniforge3/26.3.2-2   # provides mamba for -profile mamba
+module load Anaconda3/2026.07-1   # provides conda for -profile conda
 
 # Storage layout (nothing under $HOME, which has a small quota on Grace):
 #   personal scratch : Nextflow home, temp caches, work/ (large, disposable)
@@ -41,7 +41,7 @@ mkdir -p "${NXF_HOME}" "${NXF_CONDA_CACHEDIR}" "${CONDA_PKGS_DIRS}" "${WORK_DIR}
 export NXF_OPTS='-Xms1g -Xmx4g'
 
 nextflow run main.nf \
-    -profile slurm,mamba \
+    -profile slurm,conda \
     --input "${SAMPLESHEET}" \
     --outdir "${OUTDIR}" \
     --slurm_account "${SLURM_ACCOUNT:-132704181195}" \

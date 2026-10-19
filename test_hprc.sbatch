@@ -19,7 +19,7 @@ set -uo pipefail
 
 module purge
 module load Nextflow/25.10.2
-module load Miniforge3/26.3.2-2
+module load Anaconda3/2026.07-1
 
 USER_SCRATCH=${USER_SCRATCH:-/scratch/user/${USER}}
 export NXF_HOME=${USER_SCRATCH}/.cache/nextflow
@@ -30,7 +30,7 @@ mkdir -p "${NXF_HOME}"
 echo "== Node: $(hostname)   Dir: $(pwd)"
 echo "== Versions"
 nextflow -version | grep -i version
-mamba --version | head -1
+conda --version
 
 echo "== Internet from compute node (conda envs are built here by the head job)"
 for url in https://conda.anaconda.org https://repo.anaconda.com; do
