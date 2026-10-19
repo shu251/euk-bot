@@ -1,6 +1,7 @@
 #!/bin/bash
 # Head job for euk-bot on TAMU HPRC. Nextflow itself submits each pipeline step as its own SLURM job;
 # this job just keeps Nextflow alive, so it needs little CPU/memory but a long walltime.
+# Compute nodes have no internet: build the conda envs first on a login node with prebuild_envs.sh.
 #
 # Usage (from the repo directory):
 #   sbatch run_hprc.sbatch samplesheet_test3.csv /scratch/group/hu-lab/<project>/euk-bot_test3 [extra nextflow args...]
