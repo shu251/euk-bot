@@ -94,6 +94,25 @@ reference/tables/               reference_hit_counts.tsv (long: sample, sseqid, 
 pipeline_info/                  timeline, report, trace, DAG
 ```
 
+## Reference database
+
+The reference branch uses one combined DIAMOND DB: MarFERReT v1.1.1 + EukProt v3 + the prokaryotes of PhyloDB 1.076,
+with sequences duplicated across sources removed. `build_reference_db.sbatch` builds it on Grace (after `prebuild_envs.sh`). Each build is a read-only version folder;
+bump `REF_VERSION` when a source changes, and cite the version used for a run.
+
+```
+/scratch/group/hu-lab/databases/euk-bot-ref/v1/
+  euk-bot-ref.v1.dmnd               --reference_dmnd
+  euk-bot-ref.v1.taxonomy.tsv.gz    --reference_taxonomy (protein_id, source, organism, ncbi_taxid, lineage, lineage_source, pfam)
+  MANIFEST.txt                      source files + md5, merge counts, DIAMOND version, euk-bot commit
+```
+
+| Version | Sources |
+|---|---|
+| v1 | MarFERReT v1.1.1, EukProt v3 (2021_11_22), PhyloDB 1.076 (Bacteria + Archaea only), PR2 taxonomy for EukProt lineages |
+
+Eukaryote lineages use PR2 ranks (MarFERReT's PR2 taxonomy; EukProt via PR2 genus match, else UniEuk, see `lineage_source`).
+
 ## TODO / next steps
 
 - Container profile (Apptainer) as an alternative to conda on the cluster.
