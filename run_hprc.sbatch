@@ -1,10 +1,11 @@
 #!/bin/bash
 # Head job for euk-bot on TAMU HPRC. Nextflow itself submits each pipeline step as its own SLURM job;
 # this job just keeps Nextflow alive, so it needs little CPU/memory but a long walltime.
-# Compute nodes have no internet: build the conda envs first on a login node with prebuild_envs.sh.
+# Pull images / build envs first with prebuild_envs.sh. WebProxy lets this job fetch anything still missing.
 #
 # Usage (from the repo directory):
 #   sbatch run_hprc.sbatch samplesheet_test3.csv /scratch/group/hu-lab/<project>/euk-bot_test3 [extra nextflow args...]
+#   PROFILE=singularity sbatch run_hprc.sbatch ...  # Singularity images (pulled first with prebuild_envs.sh singularity)
 #
 #SBATCH --job-name=euk-bot
 #SBATCH --time=7-00:00:00
@@ -24,6 +25,7 @@ shift 2
 module purge
 module load Nextflow/25.10.2
 module load Anaconda3/2026.07-1   # provides conda for -profile conda
+module load WebProxy              # internet access from compute nodes
 
 # Storage layout (nothing under $HOME, which has a small quota on Grace):
 #   personal scratch : Nextflow home, temp caches, work/ (large, disposable)
@@ -36,13 +38,15 @@ export NXF_HOME=${USER_SCRATCH}/.cache/nextflow
 export XDG_CACHE_HOME=${USER_SCRATCH}/.cache
 export NXF_CONDA_CACHEDIR=${GROUP_SPACE}/.cache/euk-bot/conda_envs
 export CONDA_PKGS_DIRS=${USER_SCRATCH}/.cache/conda_pkgs   # many small files; keep off group quota
+export NXF_SINGULARITY_CACHEDIR=${GROUP_SPACE}/.cache/euk-bot/singularity_images
+export SINGULARITY_CACHEDIR=${TMPDIR:-${USER_SCRATCH}/.cache}/.singularity   # layer cache; HPRC: local /tmp, never $HOME
 umask 002   # keep shared envs group-writable
 mkdir -p "${NXF_HOME}" "${NXF_CONDA_CACHEDIR}" "${CONDA_PKGS_DIRS}" "${WORK_DIR}"
 
 export NXF_OPTS='-Xms1g -Xmx4g'
 
 nextflow run main.nf \
-    -profile slurm,conda \
+    -profile slurm,${PROFILE:-conda} \
     --input "${SAMPLESHEET}" \
     --outdir "${OUTDIR}" \
     --slurm_account "${SLURM_ACCOUNT:-132704181195}" \
