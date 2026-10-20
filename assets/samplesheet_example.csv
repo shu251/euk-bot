@@ -1,3 +1,3 @@
-sample,fastq_1,fastq_2
-station1_rep1,/path/to/raw/station1_rep1_R1.fastq.gz,/path/to/raw/station1_rep1_R2.fastq.gz
-station1_rep2,/path/to/raw/station1_rep2_R1.fastq.gz,/path/to/raw/station1_rep2_R2.fastq.gz
+sample,fastq_1,fastq_2,group
+station1_rep1,/path/to/raw/station1_rep1_R1.fastq.gz,/path/to/raw/station1_rep1_R2.fastq.gz,station1
+station1_rep2,/path/to/raw/station1_rep2_R1.fastq.gz,/path/to/raw/station1_rep2_R2.fastq.gz,station1

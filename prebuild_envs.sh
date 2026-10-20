@@ -1,7 +1,7 @@
 #!/bin/bash
 # Pre-build euk-bot's conda envs, or pull its Singularity images, into the shared caches so pipeline runs
 # start without fetching anything. Stub runs on the local executor: no real tools run, but Nextflow creates
-# every env / pulls every image the run touches. Run twice to cover both assemblers and eggNOG-mapper.
+# every env / pulls every image the run touches. Run twice to cover the optional steps.
 # HPRC policy: Singularity pulls must run on a compute node, so submit it with sbatch; compute nodes reach the
 # internet through the WebProxy module.
 #
@@ -44,14 +44,15 @@ mkdir -p "${NXF_HOME}" "${NXF_CONDA_CACHEDIR}" "${CONDA_PKGS_DIRS}" "${NXF_SINGU
 
 WORK_DIR=${USER_SCRATCH}/euk-bot/work_prebuild
 
-echo "== Run 1: default branches (rnaSPAdes)"
+echo "== Run 1: default branches"
 nextflow run main.nf -profile test,${PROFILE} -stub-run -work-dir "${WORK_DIR}" \
     --outdir "${USER_SCRATCH}/euk-bot/results_prebuild"
 
-echo "== Run 2: MEGAHIT + eggNOG-mapper (data dir is a placeholder; stub only)"
+echo "== Run 2: optional steps: eggNOG-mapper, assembly QC, read profiling (data dirs are placeholders; stub only)"
 nextflow run main.nf -profile test,${PROFILE} -stub-run -work-dir "${WORK_DIR}" \
     --outdir "${USER_SCRATCH}/euk-bot/results_prebuild" \
-    --assembler megahit --eggnog_data_dir tests/data
+    --eggnog_data_dir tests/data --run_assembly_qc --busco_db_dir tests/data \
+    --run_read_profiling --kaiju_db tests/data
 
 if [[ ${PROFILE} == singularity ]]; then
     echo "== Images in ${NXF_SINGULARITY_CACHEDIR}:"; ls -1 "${NXF_SINGULARITY_CACHEDIR}"
