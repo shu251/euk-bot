@@ -20,7 +20,7 @@ GROUP_SPACE=${GROUP_SPACE:-/scratch/group/hu-lab}
 export NXF_HOME=${USER_SCRATCH}/.cache/nextflow
 export XDG_CACHE_HOME=${USER_SCRATCH}/.cache
 export NXF_CONDA_CACHEDIR=${GROUP_SPACE}/.cache/euk-bot/conda_envs
-export CONDA_PKGS_DIRS=${GROUP_SPACE}/.cache/conda_pkgs
+export CONDA_PKGS_DIRS=${USER_SCRATCH}/.cache/conda_pkgs   # many small files; keep off group quota
 export NXF_OPTS='-Xms500m -Xmx2g'
 umask 002
 mkdir -p "${NXF_HOME}" "${NXF_CONDA_CACHEDIR}" "${CONDA_PKGS_DIRS}"

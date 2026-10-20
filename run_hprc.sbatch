@@ -35,7 +35,7 @@ WORK_DIR=${WORK_DIR:-${USER_SCRATCH}/euk-bot/work}
 export NXF_HOME=${USER_SCRATCH}/.cache/nextflow
 export XDG_CACHE_HOME=${USER_SCRATCH}/.cache
 export NXF_CONDA_CACHEDIR=${GROUP_SPACE}/.cache/euk-bot/conda_envs
-export CONDA_PKGS_DIRS=${GROUP_SPACE}/.cache/conda_pkgs
+export CONDA_PKGS_DIRS=${USER_SCRATCH}/.cache/conda_pkgs   # many small files; keep off group quota
 umask 002   # keep shared envs group-writable
 mkdir -p "${NXF_HOME}" "${NXF_CONDA_CACHEDIR}" "${CONDA_PKGS_DIRS}" "${WORK_DIR}"
 
