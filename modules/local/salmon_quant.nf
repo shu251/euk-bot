@@ -2,6 +2,7 @@ process SALMON_QUANT {
     tag "${meta.id}"
     label 'process_medium'
     conda 'bioconda::salmon=1.10.3'
+    container 'quay.io/biocontainers/salmon:1.10.3--h45fbf2d_5'
 
     input:
     tuple val(meta), path(reads)

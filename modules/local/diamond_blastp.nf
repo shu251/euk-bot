@@ -2,6 +2,7 @@
 process DIAMOND_BLASTP {
     label 'process_high'
     conda 'bioconda::diamond=2.1.10'
+    container 'quay.io/biocontainers/diamond:2.1.10--h5ca1c30_3'
 
     input:
     path(pep)

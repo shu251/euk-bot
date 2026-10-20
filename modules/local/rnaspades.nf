@@ -3,6 +3,7 @@ process RNASPADES {
     label 'process_high'
     label 'process_high_memory'
     conda 'bioconda::spades=4.0.0'
+    container 'quay.io/biocontainers/spades:4.0.0--haf24da9_4'
 
     input:
     tuple val(meta), path(reads)

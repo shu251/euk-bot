@@ -1,6 +1,7 @@
 process SUMMARIZE_HITS {
     label 'process_medium'
     conda 'conda-forge::python=3.12'
+    container 'docker.io/library/python:3.12-slim'
 
     input:
     path(hit_tables)

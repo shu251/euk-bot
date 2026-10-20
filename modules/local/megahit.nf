@@ -2,6 +2,7 @@ process MEGAHIT {
     tag "${meta.id}"
     label 'process_high'
     conda 'bioconda::megahit=1.2.9'
+    container 'quay.io/biocontainers/megahit:1.2.9--haf24da9_8'
 
     input:
     tuple val(meta), path(reads)

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build euk-bot's combined reference DB: MarFERReT v1.1.1 + EukProt v3 + PhyloDB prokaryotes, with exact
 # duplicates across sources removed (see bin/build_reference_db.py), then a DIAMOND database from it using
-# the pipeline's own DIAMOND env so the DB format matches. Needs the envs from prebuild_envs.sh.
+# the pipeline's own DIAMOND (Singularity image or conda env) so the DB format matches. Run prebuild_envs.sh first.
 #
 # Each build goes in its own version folder with a MANIFEST.txt (sources, checksums, counts, git commit),
 # and the job refuses to overwrite an existing version. Bump REF_VERSION when any source changes.
@@ -43,12 +43,21 @@ SOURCES=(
     "${DB}/PR2/pr2-tax.tsv"
 )
 ENVS=/scratch/group/hu-lab/.cache/euk-bot/conda_envs
+IMAGES=/scratch/group/hu-lab/.cache/euk-bot/singularity_images
 
 module purge
 module load Anaconda3/2026.07-1   # python3 for the merge script
 
-DIAMOND_ENV=$(dirname "$(dirname "$(grep -l "diamond=2.1.10" "${ENVS}"/env-*/conda-meta/history | head -1)")")
-[[ -x ${DIAMOND_ENV}/bin/diamond ]] || { echo "DIAMOND env not found in ${ENVS}; run prebuild_envs.sh first" >&2; exit 1; }
+# DIAMOND 2.1.10: the pipeline's Singularity image if pulled, else its conda env
+DIAMOND_SIF=$(ls "${IMAGES}"/*diamond-2.1.10*.img 2>/dev/null | head -1 || true)
+DIAMOND_ENV=$(dirname "$(dirname "$(grep -l "diamond=2.1.10" "${ENVS}"/env-*/conda-meta/history 2>/dev/null | head -1)")")
+if [[ -n ${DIAMOND_SIF} ]]; then
+    DIAMOND=(singularity exec "${DIAMOND_SIF}" diamond)
+elif [[ -x ${DIAMOND_ENV}/bin/diamond ]]; then
+    DIAMOND=("${DIAMOND_ENV}/bin/diamond")
+else
+    echo "No DIAMOND 2.1.10 image in ${IMAGES} or env in ${ENVS}; run prebuild_envs.sh first" >&2; exit 1
+fi
 gzip -t "${PHYLODB_FAA}" || { echo "${PHYLODB_FAA} is not a valid gzip file" >&2; exit 1; }
 
 [[ -e ${OUT_DIR} ]] && { echo "${OUT_DIR} already exists; set a new REF_VERSION" >&2; exit 1; }
@@ -59,7 +68,7 @@ mkdir -p "${OUT_DIR}"
     echo "euk-bot reference DB ${REF_VERSION}"
     echo "built:   $(date)  by ${USER}  (SLURM job ${SLURM_JOB_ID:-none})"
     echo "euk-bot: $(git rev-parse --short HEAD)$(git diff --quiet || echo ' + uncommitted changes')"
-    echo "diamond: $("${DIAMOND_ENV}/bin/diamond" version)"
+    echo "diamond: $("${DIAMOND[@]}" version)"
     echo
     echo "== sources (md5, size, path)"
     for f in "${SOURCES[@]}"; do
@@ -78,8 +87,8 @@ python3 bin/build_reference_db.py \
     --pr2-taxonomy "${DB}/PR2/pr2-tax.tsv" \
     --out "${PREFIX}" 2> >(tee -a "${MANIFEST}" >&2)
 
-echo "== $(date +%T) diamond makedb ($("${DIAMOND_ENV}/bin/diamond" version))"
-"${DIAMOND_ENV}/bin/diamond" makedb \
+echo "== $(date +%T) diamond makedb ($("${DIAMOND[@]}" version))"
+"${DIAMOND[@]}" makedb \
     --in "${PREFIX}.faa.gz" \
     --db "${PREFIX}" \
     --threads "${SLURM_CPUS_PER_TASK}"

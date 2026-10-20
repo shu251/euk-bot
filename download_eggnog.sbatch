@@ -1,8 +1,8 @@
 #!/bin/bash
 # Download the eggNOG-mapper 2.1.x data (emapperdb 5.0.2) for --eggnog_data_dir: annotation DB, taxa DB and
 # DIAMOND DB. About 15 GB to download and about 55 GB once unpacked, but only a handful of files.
-# Grace compute nodes have had no internet, so the job checks first and exits right away if it can't reach
-# the server. In that case run the same script on a login node inside tmux: bash download_eggnog.sbatch
+# Compute nodes reach the internet through the WebProxy module; the job checks the server first and exits
+# right away if it can't reach it.
 # Downloads resume, so rerunning after a failure picks up where it stopped.
 #
 # Usage (from the repo directory):
@@ -18,6 +18,8 @@
 #SBATCH --partition=medium
 
 set -euo pipefail
+
+module load WebProxy   # internet access from compute nodes
 
 DATA_DIR=${1:-/scratch/group/hu-lab/databases/eggnog}
 BASE_URL=http://eggnog5.embl.de/download/emapperdb-5.0.2

@@ -2,6 +2,7 @@ process FASTP {
     tag "${meta.id}"
     label 'process_medium'
     conda 'bioconda::fastp=0.23.4'
+    container 'quay.io/biocontainers/fastp:0.23.4--h125f33a_5'
 
     input:
     tuple val(meta), path(reads)

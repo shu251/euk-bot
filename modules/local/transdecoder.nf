@@ -1,6 +1,7 @@
 process TRANSDECODER {
     label 'process_medium'
     conda 'bioconda::transdecoder=5.7.1'
+    container 'quay.io/biocontainers/transdecoder:5.7.1--pl5321hdfd78af_2'
 
     input:
     path(fasta)

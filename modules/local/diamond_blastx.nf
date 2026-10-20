@@ -3,6 +3,7 @@ process DIAMOND_BLASTX {
     tag "${meta.id}"
     label 'process_high'
     conda 'bioconda::diamond=2.1.10'
+    container 'quay.io/biocontainers/diamond:2.1.10--h5ca1c30_3'
 
     input:
     tuple val(meta), path(reads)

@@ -4,6 +4,7 @@ process RIBODETECTOR {
     tag "${meta.id}"
     label 'process_medium'
     conda 'bioconda::ribodetector=0.3.0'
+    container 'quay.io/biocontainers/ribodetector:0.3.0--pyhdfd78af_0'
 
     input:
     tuple val(meta), path(reads)

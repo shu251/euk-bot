@@ -3,6 +3,7 @@ process CDHIT_EST {
     label 'process_high'
     label 'process_high_memory'
     conda 'bioconda::cd-hit=4.8.1'
+    container 'quay.io/biocontainers/cd-hit:4.8.1--h5ca1c30_13'
 
     input:
     path(contigs)
