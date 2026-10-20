@@ -12,9 +12,13 @@ workflow QC_PREPROCESS {
     FASTP(reads)
 
     ch_clean_reads   = FASTP.out.reads
+    ch_rrna_reads    = channel.empty()
+    ch_rrna_stats    = channel.empty()
     if (!params.skip_rrna_removal) {
         RIBODETECTOR(FASTP.out.reads)
         ch_clean_reads = RIBODETECTOR.out.reads
+        ch_rrna_reads  = RIBODETECTOR.out.rrna
+        ch_rrna_stats  = RIBODETECTOR.out.stats
         // One table of per-sample rRNA fractions
         RIBODETECTOR.out.stats
             .map { _meta, tsv -> tsv }
@@ -29,5 +33,8 @@ workflow QC_PREPROCESS {
     MULTIQC(ch_multiqc_files)
 
     emit:
-    reads = ch_clean_reads    // [meta, [R1, R2]] trimmed, rRNA-depleted
+    reads      = ch_clean_reads    // [meta, [R1, R2]] trimmed, rRNA-depleted
+    rrna       = ch_rrna_reads     // [meta, [R1, R2]] rRNA reads, for an optional 18S branch
+    fastp_json = FASTP.out.json    // [meta, json]
+    rrna_stats = ch_rrna_stats     // [meta, tsv] per-sample rRNA fraction
 }
