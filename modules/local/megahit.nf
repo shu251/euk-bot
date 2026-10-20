@@ -8,7 +8,7 @@ process MEGAHIT {
     tuple val(meta), path(reads)
 
     output:
-    tuple val(meta), path("${meta.id}.contigs.fa"), emit: contigs
+    tuple val(meta), path("${meta.id}.megahit.contigs.fa"), emit: contigs
 
     script:
     def args = task.ext.args ?: ''
@@ -20,14 +20,14 @@ process MEGAHIT {
         --memory ${task.memory.toBytes()} \\
         ${args}
 
-    # Prefix contig IDs with the sample and drop MEGAHIT's header annotations
-    awk -v s=${meta.id} '/^>/ { print ">" s "_" substr(\$1, 2); next } { print }' \\
-        megahit_out/final.contigs.fa > ${meta.id}.contigs.fa
+    # Prefix contig IDs with the sample (or group) and assembler, and drop MEGAHIT's header annotations
+    awk -v s=${meta.id}_megahit '/^>/ { print ">" s "_" substr(\$1, 2); next } { print }' \\
+        megahit_out/final.contigs.fa > ${meta.id}.megahit.contigs.fa
     rm -rf megahit_out
     """
 
     stub:
     """
-    touch ${meta.id}.contigs.fa
+    touch ${meta.id}.megahit.contigs.fa
     """
 }

@@ -9,7 +9,7 @@ process RNASPADES {
     tuple val(meta), path(reads)
 
     output:
-    tuple val(meta), path("${meta.id}.contigs.fa"), emit: contigs
+    tuple val(meta), path("${meta.id}.rnaspades.contigs.fa"), emit: contigs
 
     script:
     def args = task.ext.args ?: ''
@@ -21,14 +21,14 @@ process RNASPADES {
         -m ${task.memory.toGiga()} \\
         ${args}
 
-    # Prefix contig IDs with the sample so they stay unique after pooling
-    awk -v s=${meta.id} '/^>/ { print ">" s "_" substr(\$1, 2); next } { print }' \\
-        spades_out/transcripts.fasta > ${meta.id}.contigs.fa
+    # Prefix contig IDs with the sample (or group) and assembler so they stay unique after pooling
+    awk -v s=${meta.id}_rnaspades '/^>/ { print ">" s "_" substr(\$1, 2); next } { print }' \\
+        spades_out/transcripts.fasta > ${meta.id}.rnaspades.contigs.fa
     rm -rf spades_out
     """
 
     stub:
     """
-    touch ${meta.id}.contigs.fa
+    touch ${meta.id}.rnaspades.contigs.fa
     """
 }

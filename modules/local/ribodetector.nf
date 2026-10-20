@@ -1,5 +1,6 @@
 // Removes rRNA reads with a deep-learning classifier (no reference database needed).
 // -e rrna: a pair is called rRNA if either mate is, so as many rRNA reads as possible are removed.
+// The rRNA pairs are kept too (e.g. for 18S profiles against PR2 later).
 process RIBODETECTOR {
     tag "${meta.id}"
     label 'process_medium'
@@ -11,6 +12,7 @@ process RIBODETECTOR {
 
     output:
     tuple val(meta), path("${meta.id}_non_rRNA_{1,2}.fq.gz"), emit: reads
+    tuple val(meta), path("${meta.id}.rRNA_{1,2}.fq.gz"),     emit: rrna
     tuple val(meta), path("${meta.id}.ribodetector.tsv"),     emit: stats
     tuple val(meta), path("${meta.id}.ribodetector.log"),     emit: log
 
@@ -23,7 +25,8 @@ process RIBODETECTOR {
         -e rrna \\
         --chunk_size ${params.ribodetector_chunk_size} \\
         --log ${meta.id}.ribodetector.log \\
-        -o ${meta.id}_non_rRNA_1.fq.gz ${meta.id}_non_rRNA_2.fq.gz
+        -o ${meta.id}_non_rRNA_1.fq.gz ${meta.id}_non_rRNA_2.fq.gz \\
+        -r ${meta.id}.rRNA_1.fq.gz ${meta.id}.rRNA_2.fq.gz
 
     # Per-sample rRNA fraction (read pairs in vs. kept)
     n_in=\$(( \$(zcat ${reads[0]} | wc -l) / 4 ))
@@ -36,7 +39,7 @@ process RIBODETECTOR {
 
     stub:
     """
-    touch ${meta.id}_non_rRNA_1.fq.gz ${meta.id}_non_rRNA_2.fq.gz ${meta.id}.ribodetector.log
+    touch ${meta.id}_non_rRNA_1.fq.gz ${meta.id}_non_rRNA_2.fq.gz ${meta.id}.rRNA_1.fq.gz ${meta.id}.rRNA_2.fq.gz ${meta.id}.ribodetector.log
     printf 'sample\\tinput_pairs\\tnon_rrna_pairs\\tpct_rrna\\n' > ${meta.id}.ribodetector.tsv
     """
 }
