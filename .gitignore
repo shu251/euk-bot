@@ -3,6 +3,7 @@ work/
 .nextflow/
 .nextflow.log*
 .conda_envs/
+.singularity_images/
 
 # Outputs
 results/

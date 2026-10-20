@@ -49,7 +49,7 @@ python3 bin/make_samplesheet.py /path/to/raw-reads -o samplesheet.csv -n 3
 ```
 
 ```bash
-nextflow run main.nf -profile slurm,conda \
+nextflow run main.nf -profile slurm,singularity \
     --input samplesheet.csv \
     --outdir results \
     --reference_dmnd /path/to/MarFERReT.dmnd \
@@ -115,7 +115,6 @@ Eukaryote lineages use PR2 ranks (MarFERReT's PR2 taxonomy; EukProt via PR2 genu
 
 ## TODO / next steps
 
-- Container profile (Apptainer) as an alternative to conda on the cluster.
 - Optional co-assembly by sample group (e.g. a `group` column in the samplesheet).
 - Swap in EUKulele for consensus taxonomy on the assembly branch, if preferred.
 - Join `proteins_vs_reference.tsv` and the salmon tables into a contig-level taxonomy + function + counts table.
