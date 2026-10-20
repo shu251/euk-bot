@@ -5,7 +5,7 @@ Nextflow (DSL2) pipeline that processes paired-end metatranscriptome FASTQ into 
 ```mermaid
 flowchart LR
     A[Raw FASTQ] --> B[FastQC] --> M[MultiQC]
-    A --> C[fastp] --> D[SortMeRNA<br/>rRNA removal]
+    A --> C[fastp] --> D[RiboDetector<br/>rRNA removal]
     C --> M
     D --> M
     D --> E1[rnaSPAdes / MEGAHIT<br/>per sample]
@@ -29,7 +29,7 @@ conf/
   slurm.config                SLURM executor, account/queue, per-node resource caps
   test.config                 tiny dataset for wiring checks
 subworkflows/local/
-  qc_preprocess.nf            FastQC, fastp, SortMeRNA, MultiQC
+  qc_preprocess.nf            FastQC, fastp, RiboDetector, MultiQC
   assembly.nf                 assembly -> cluster -> ORFs -> annotation -> salmon
   reference_map.nf            DIAMOND blastx of reads -> hit counts
 modules/local/                one process per tool (conda env + stub block each)
@@ -52,7 +52,6 @@ python3 bin/make_samplesheet.py /path/to/raw-reads -o samplesheet.csv -n 3
 nextflow run main.nf -profile slurm,conda \
     --input samplesheet.csv \
     --outdir results \
-    --sortmerna_db '/path/to/rRNA_databases/*.fasta' \
     --reference_dmnd /path/to/MarFERReT.dmnd \
     --reference_taxonomy /path/to/MarFERReT_taxonomy.tsv \
     --slurm_account <account> \
@@ -70,6 +69,8 @@ Common switches:
 | `--cdhit_identity` | `0.98` | clustering threshold for pooled contigs |
 | `--eggnog_data_dir` | none | set it to run eggNOG-mapper on predicted proteins |
 | `--skip_rrna_removal` | `false` | |
+| `--ribodetector_read_len` | `150` | set to the sequencing read length |
+| `--ribodetector_chunk_size` | `240` | lower if RiboDetector runs out of memory |
 | `--save_trimmed`, `--save_non_rrna` | `false` | publish intermediate reads |
 
 Wiring check (no tools run; run from repo root):
@@ -81,7 +82,7 @@ nextflow run main.nf -profile test -stub-run
 ## Outputs (`results/`)
 
 ```
-qc/{fastqc_raw,fastp,sortmerna,multiqc}/
+qc/{fastqc_raw,fastp,ribodetector,multiqc}/   ribodetector/rrna_summary.tsv = % rRNA per sample
 assembly/per_sample/            <sample>.contigs.fa (IDs prefixed with sample)
 assembly/clustered/             clustered_contigs.fa (+ .clstr)
 assembly/transdecoder/          .pep / .cds / .gff3
