@@ -1,7 +1,7 @@
 process SUMMARIZE_HITS {
     label 'process_medium'
-    conda 'conda-forge::python=3.12'
-    container 'docker.io/library/python:3.12-slim'
+    conda 'conda-forge::python=3.9'
+    container 'quay.io/biocontainers/python:3.9--1'   // has ps, which Nextflow needs; slim images don't
 
     input:
     path(hit_tables)
