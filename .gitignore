@@ -16,3 +16,6 @@ results_test/
 
 .DS_Store
 __pycache__/
+
+# Logs copied from HPRC to share with Claude (not tracked)
+fromhprc/
