@@ -8,8 +8,8 @@ flowchart LR
     A --> C[fastp] --> D[RiboDetector<br/>rRNA removal]
     C --> M
     D --> M
-    D --> E1[rnaSPAdes / MEGAHIT<br/>per sample]
-    E1 --> E2[CD-HIT-EST<br/>pool + cluster]
+    D --> E1[rnaSPAdes + MEGAHIT per sample<br/>+ MEGAHIT co-assembly per group]
+    E1 --> E2[MMseqs2 linclust<br/>pool + cluster]
     E2 --> E3[TransDecoder]
     E3 --> E4[DIAMOND blastp<br/>+ eggNOG optional]
     E2 --> E5[salmon index]
@@ -31,6 +31,8 @@ conf/
 subworkflows/local/
   qc_preprocess.nf            FastQC, fastp, RiboDetector, MultiQC
   assembly.nf                 assembly -> cluster -> ORFs -> annotation -> salmon
+  assembly_qc.nf              optional per-assembly QC (seqkit, read mapping rate, BUSCO)
+  read_profile.nf             optional pre-assembly read profile and suggested co-assembly groups
   reference_map.nf            DIAMOND blastx of reads -> hit counts
 modules/local/                one process per tool (conda env + stub block each)
 bin/                          helper scripts (auto-added to PATH by Nextflow)
@@ -40,7 +42,7 @@ tests/                        test samplesheet + toy reads
 
 ## Running
 
-Samplesheet (CSV): `sample,fastq_1,fastq_2`. See `assets/samplesheet_example.csv`. Rows that share a `sample` (e.g. one per lane) are concatenated before QC.
+Samplesheet (CSV): `sample,fastq_1,fastq_2[,group]`. See `assets/samplesheet_example.csv`. Rows that share a `sample` (e.g. one per lane) are concatenated before QC. The optional `group` column (e.g. vent site or habitat) defines co-assemblies: samples in a group are pooled and co-assembled, in addition to the per-sample assemblies.
 
 Build one from a directory of Illumina `*_S*_L00*_R{1,2}_001.fastq.gz` files (`-n` keeps only the first N samples, for test runs):
 
@@ -65,13 +67,21 @@ Common switches:
 | Param | Default | Notes |
 |---|---|---|
 | `--run_assembly` / `--run_reference` | `true` / `true` | turn either branch off |
-| `--assembler` | `rnaspades` | or `megahit` |
-| `--cdhit_identity` | `0.98` | clustering threshold for pooled contigs |
+| `--assemblers` | `rnaspades,megahit` | per-sample assemblers |
+| `--coassembly_assemblers` | `megahit` | per-group co-assemblers (needs a `group` column); `''` turns co-assembly off |
+| `--cluster_identity` / `--cluster_coverage` | `0.98` / `0.9` | MMseqs2 linclust thresholds for pooled contigs |
+| `--run_read_profiling` | `false` | pre-assembly read profile (`qc/read_profile/read_profile.tsv`): sourmash similarity, Nonpareil, strandedness, Kaiju, suggested groups |
+| `--stop_after_profiling` | `false` | run QC + read profiling only, to choose co-assembly groups before assembling |
+| `--profile_group_similarity` | `0.5` | sourmash similarity cutoff for suggested groups |
+| `--strand_check_dmnd` / `--kaiju_db` | none | protein DB for strandedness (default `--reference_dmnd`); Kaiju DB dir (Kaiju skipped if unset) |
+| `--run_assembly_qc` | `false` | per-assembly contig stats, read mapping rate and (with `--busco_db_dir`) BUSCO, before clustering |
+| `--busco_db_dir` / `--busco_lineages` | none / `eukaryota_odb12` | BUSCO datasets from `download_busco.sbatch` |
 | `--eggnog_data_dir` | none | set it to run eggNOG-mapper on predicted proteins |
 | `--skip_rrna_removal` | `false` | |
 | `--ribodetector_read_len` | `150` | set to the sequencing read length |
 | `--ribodetector_chunk_size` | `240` | lower if RiboDetector runs out of memory |
 | `--save_trimmed`, `--save_non_rrna` | `false` | publish intermediate reads |
+| `--save_rrna` | `true` | publish the rRNA reads removed by RiboDetector (`reads/rRNA/`) for separate 18S analysis |
 
 Wiring check (no tools run; run from repo root):
 
@@ -79,12 +89,25 @@ Wiring check (no tools run; run from repo root):
 nextflow run main.nf -profile test -stub-run
 ```
 
+### Choosing co-assembly groups
+
+1. Run QC + profiling only: `--stop_after_profiling` (add `--strand_check_dmnd`, `--kaiju_db` if available).
+2. Open `qc/read_profile/read_profile.tsv`: `suggested_group` clusters samples by read similarity; a low
+   `mean_similarity_within_samplesheet_group` flags a sample that doesn't match its assigned group.
+   Fill in `my_group` (and `my_notes`) yourself.
+3. `python3 bin/apply_groups.py read_profile.tsv samplesheet.csv -o samplesheet_grouped.csv` writes `my_group`
+   into the samplesheet's `group` column (`--fallback suggested|samplesheet` fills blanks).
+4. Run the full pipeline with that samplesheet and `-resume`, so QC isn't repeated.
+
 ## Outputs (`results/`)
 
 ```
+qc/read_profile/                read_profile.tsv, samplesheet_suggested.csv, sourmash_similarity.csv, per-sample Nonpareil/strandedness/Kaiju
 qc/{fastqc_raw,fastp,ribodetector,multiqc}/   ribodetector/rrna_summary.tsv = % rRNA per sample
-assembly/per_sample/            <sample>.contigs.fa (IDs prefixed with sample)
-assembly/clustered/             clustered_contigs.fa (+ .clstr)
+reads/rRNA/                     <sample>.rRNA_{1,2}.fq.gz (with --save_rrna, default on)
+assembly/contigs/               <sample|coasm_group>.<assembler>.contigs.fa (IDs prefixed the same way)
+assembly/qc/                    assembly_qc.tsv: one row per assembly (contig stats, % reads mapped back, BUSCO), with --run_assembly_qc
+assembly/clustered/             clustered_contigs.fa, clustered_contigs_clusters.tsv (representative, member)
 assembly/transdecoder/          .pep / .cds / .gff3
 assembly/annotation/            proteins_vs_reference.tsv, eggNOG annotations
 assembly/salmon/<sample>/       quant.sf
@@ -115,6 +138,5 @@ Eukaryote lineages use PR2 ranks (MarFERReT's PR2 taxonomy; EukProt via PR2 genu
 
 ## TODO / next steps
 
-- Optional co-assembly by sample group (e.g. a `group` column in the samplesheet).
 - Swap in EUKulele for consensus taxonomy on the assembly branch, if preferred.
 - Join `proteins_vs_reference.tsv` and the salmon tables into a contig-level taxonomy + function + counts table.
