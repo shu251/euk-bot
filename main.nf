@@ -2,7 +2,7 @@
 /*
  * euk-bot: metatranscriptome processing for paired-end FASTQ
  *
- *   QC_PREPROCESS : FastQC -> fastp -> SortMeRNA (rRNA removal) -> MultiQC
+ *   QC_PREPROCESS : FastQC -> fastp -> RiboDetector (rRNA removal) -> MultiQC
  *   ASSEMBLY      : per-sample assembly -> CD-HIT-EST clustering -> TransDecoder
  *                   -> DIAMOND/eggNOG annotation -> salmon quantification
  *   REFERENCE_MAP : DIAMOND blastx of reads against a reference protein DB
@@ -16,9 +16,6 @@ include { REFERENCE_MAP } from './subworkflows/local/reference_map'
 workflow {
     if (!params.input) {
         error "Provide a samplesheet with --input (columns: sample,fastq_1,fastq_2)"
-    }
-    if (!params.skip_rrna_removal && !params.sortmerna_db) {
-        error "Provide rRNA reference FASTA(s) with --sortmerna_db, or set --skip_rrna_removal"
     }
     if (params.run_reference && !params.reference_dmnd) {
         error "The reference branch needs a DIAMOND database: --reference_dmnd (or --run_reference false)"
