@@ -3,6 +3,7 @@
 process KAIJU {
     tag "${meta.id}"
     label 'process_high'
+    label 'process_high_memory'   // nr_euk index needs ~204 GB RAM
     conda 'bioconda::kaiju=1.10.3'
     container 'quay.io/biocontainers/kaiju:1.10.3--h5814d7d_0'
 

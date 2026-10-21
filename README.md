@@ -73,7 +73,7 @@ Common switches:
 | `--run_read_profiling` | `false` | pre-assembly read profile (`qc/read_profile/read_profile.tsv`): sourmash similarity, Nonpareil, strandedness, Kaiju, suggested groups |
 | `--stop_after_profiling` | `false` | run QC + read profiling only, to choose co-assembly groups before assembling |
 | `--profile_group_similarity` | `0.5` | sourmash similarity cutoff for suggested groups |
-| `--strand_check_dmnd` / `--kaiju_db` | none | protein DB for strandedness (default `--reference_dmnd`); Kaiju DB dir (Kaiju skipped if unset) |
+| `--strand_check_dmnd` / `--kaiju_db` | none | protein DB for strandedness (default `--reference_dmnd`); Kaiju DB dir from `download_kaiju.sbatch` (Kaiju skipped if unset; nr_euk needs ~204 GB RAM) |
 | `--run_assembly_qc` | `false` | per-assembly contig stats, read mapping rate and (with `--busco_db_dir`) BUSCO, before clustering |
 | `--busco_db_dir` / `--busco_lineages` | none / `eukaryota_odb12` | BUSCO datasets from `download_busco.sbatch` |
 | `--eggnog_data_dir` | none | set it to run eggNOG-mapper on predicted proteins |

@@ -19,7 +19,7 @@ workflow {
     if (!params.input) {
         error "Provide a samplesheet with --input (columns: sample,fastq_1,fastq_2[,group])"
     }
-    if (params.run_reference && !params.reference_dmnd) {
+    if (params.run_reference && !params.reference_dmnd && !params.stop_after_profiling) {
         error "The reference branch needs a DIAMOND database: --reference_dmnd (or --run_reference false)"
     }
 
