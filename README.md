@@ -29,10 +29,12 @@ conf/
   slurm.config                SLURM executor, account/queue, per-node resource caps
   test.config                 tiny dataset for wiring checks
 subworkflows/local/
-  qc_preprocess.nf            FastQC, fastp, RiboDetector, MultiQC
+  preliminary_qc.nf           step 1, Preliminary QC: FastQC, fastp, RiboDetector, MultiQC, per-sample QC table
   assembly.nf                 assembly -> cluster -> ORFs -> annotation -> salmon
   assembly_qc.nf              optional per-assembly QC (seqkit, read mapping rate, BUSCO)
-  read_profile.nf             optional pre-assembly read profile and suggested co-assembly groups
+  read_screening.nf           step 2, Read screening (optional): strandedness, sourmash, Nonpareil, Kaiju,
+                              suggested co-assembly groups
+  methods.nf                  writes <outdir>/methods.txt
   reference_map.nf            DIAMOND blastx of reads -> hit counts
 modules/local/                one process per tool (conda env + stub block each)
 bin/                          helper scripts (auto-added to PATH by Nextflow)
@@ -103,6 +105,9 @@ nextflow run main.nf -profile test -stub-run
 
 ```
 qc/read_profile/                read_profile.tsv, samplesheet_suggested.csv, sourmash_similarity.csv, per-sample Nonpareil/strandedness/Kaiju
+methods.txt                     software, versions and key arguments of each step the run used (written at launch)
+qc/preliminary_qc.tsv           per sample: raw read pairs split into removed by fastp / rRNA / non-rRNA (counts and
+                                % of raw, summing to 100), plus fastp quality metrics
 qc/{fastqc_raw,fastp,ribodetector,multiqc}/   ribodetector/rrna_summary.tsv = % rRNA per sample
 reads/rRNA/                     <sample>.rRNA_{1,2}.fq.gz (with --save_rrna, default on)
 assembly/contigs/               <sample|coasm_group>.<assembler>.contigs.fa (IDs prefixed the same way)
