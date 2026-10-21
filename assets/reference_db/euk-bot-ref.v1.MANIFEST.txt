@@ -1,0 +1,33 @@
+euk-bot reference DB v1
+built:   Tue Oct 20 10:42:09 CDT 2026  by skhu  (SLURM job 20210436)
+euk-bot: ca39647
+diamond: diamond version 2.1.10
+
+== sources (md5, size, path)
+87b72276ad7dc369185e7978b230c297  4.4G  /scratch/group/hu-lab/databases/marferret/data/MarFERReT.v1.1.1.proteins.faa.gz
+cf438beef5924e0051f728528a4e7165  376K  /scratch/group/hu-lab/databases/marferret/data/MarFERReT.v1.1.1.metadata.csv
+0379b3773c6e0a43eb9f1767d3b1e2ca  235M  /scratch/group/hu-lab/databases/marferret/data/MarFERReT.v1.1.1.proteins_info.tab.gz
+3a8789b1134574a96a518aaccd275320  117M  /scratch/group/hu-lab/databases/marferret/data/MarFERReT.v1.1.1.best_pfam_annotations.csv.gz
+99f37f8b75451e5b81162df53b2ed006  5.2G  /scratch/group/hu-lab/databases/eukprot_v3/EukProt_proteins.v03.2021_11_22.tgz
+f8599a2db3c95ff322e7dd9cb50fbde7  772K  /scratch/group/hu-lab/databases/eukprot_v3/EukProt_included_data_sets.v03.2021_11_22.txt
+9514e812c9485bf078062e28abc575e6  6.2G  /scratch/group/hu-lab/databases/phylodb_1.076/phylodb_1.076.pep.fa.gz
+7c820a3da9006cbefabf77ab7c7a35d2  1.9G  /scratch/group/hu-lab/databases/phylodb/prot-map.json
+6d7ed6a691db2373f96768eb22e1bea4  4.5M  /scratch/group/hu-lab/databases/phylodb/taxonomy-table.txt
+221df9aab39250eb8c43b747e012da61  29M  /scratch/group/hu-lab/databases/PR2/pr2-tax.tsv
+
+== merge counts
+PR2 genera: 22914
+== adding MarFERReT
+   MFT written: 27951028
+== adding EukProt
+   EUK duplicate of earlier source: 1681757, EUK written: 26910502, MFT written: 27951028
+== adding PhyloDB
+PhyloDB prokaryote strains: 5140
+   EUK duplicate of earlier source: 1681757, EUK written: 26910502, MFT written: 27951028, PDB duplicate of earlier source: 34477, PDB not prokaryote / unmapped: 15233645, PDB written: 14177119
+
+== outputs
+total 34G
+-rw-rw-r-- 1 skhu hu-lab  23G Oct 20 11:11 euk-bot-ref.v1.dmnd
+-rw-rw-r-- 1 skhu hu-lab  12G Oct 20 11:06 euk-bot-ref.v1.faa.gz
+-rw-rw-r-- 1 skhu hu-lab 381M Oct 20 11:06 euk-bot-ref.v1.taxonomy.tsv.gz
+-rw-rw-r-- 1 skhu hu-lab 1.8K Oct 20 11:11 MANIFEST.txt
