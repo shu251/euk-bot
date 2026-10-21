@@ -135,6 +135,11 @@ bump `REF_VERSION` when a source changes, and cite the version used for a run.
 | v1 | MarFERReT v1.1.1, EukProt v3 (2021_11_22), PhyloDB 1.076 (Bacteria + Archaea only), PR2 taxonomy for EukProt lineages |
 
 A copy of each version's manifest is kept in `assets/reference_db/euk-bot-ref.<version>.MANIFEST.txt`.
+`annotate_reference_db.sbatch` runs eggNOG-mapper over a version as a SLURM array (split, run, merge) into
+`<version>_eggnog/` beside it (KEGG KO/pathways, Pfam, COG, GO for every protein with an eggNOG hit).
+`reference_db_stats.sbatch` writes summary tables for a version (sizes, length distribution, per-organism
+taxonomy, Pfam coverage, and KEGG coverage once the eggNOG annotations exist) to
+`assets/reference_db/euk-bot-ref.<version>.stats/`.
 
 Eukaryote lineages use PR2 ranks (MarFERReT's PR2 taxonomy; EukProt via PR2 genus match, else UniEuk, see `lineage_source`).
 
