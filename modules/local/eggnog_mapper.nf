@@ -1,14 +1,15 @@
 process EGGNOG_MAPPER {
+    tag "${name}"
     label 'process_high'
     conda 'bioconda::eggnog-mapper=2.1.12'
     container 'quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_2'
 
     input:
-    path(pep)
+    tuple val(name), path(pep)    // name: ORF caller (transdecoder / metaeuk)
     path(data_dir)
 
     output:
-    path('clustered.emapper.annotations'), emit: annotations
+    path("${name}.emapper.annotations"), emit: annotations
 
     script:
     """
@@ -17,11 +18,11 @@ process EGGNOG_MAPPER {
         --data_dir ${data_dir} \\
         -m diamond \\
         --cpu ${task.cpus} \\
-        -o clustered
+        -o ${name}
     """
 
     stub:
     """
-    touch clustered.emapper.annotations
+    touch ${name}.emapper.annotations
     """
 }

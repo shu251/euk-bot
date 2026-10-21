@@ -18,6 +18,6 @@ process FASTQC {
 
     stub:
     """
-    touch ${meta.id}_1_fastqc.zip ${meta.id}_1_fastqc.html
+    touch ${reads[0].simpleName}_fastqc.zip ${reads[0].simpleName}_fastqc.html
     """
 }

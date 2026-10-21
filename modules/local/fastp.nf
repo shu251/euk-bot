@@ -1,3 +1,5 @@
+// Adapter trimming (auto-detected for pairs), Trimmomatic-style sliding-window quality trimming (window 4,
+// mean quality --trim_mean_quality, like SLIDINGWINDOW:4:15) and a minimum length (--min_read_length).
 process FASTP {
     tag "${meta.id}"
     label 'process_medium'
@@ -19,6 +21,8 @@ process FASTP {
         -i ${reads[0]} -I ${reads[1]} \\
         -o ${meta.id}_trimmed_1.fq.gz -O ${meta.id}_trimmed_2.fq.gz \\
         --detect_adapter_for_pe \\
+        --cut_right --cut_window_size 4 --cut_mean_quality ${params.trim_mean_quality} \\
+        --length_required ${params.min_read_length} \\
         --thread ${Math.min(task.cpus as int, 16)} \\
         --json ${meta.id}.fastp.json \\
         --html ${meta.id}.fastp.html \\

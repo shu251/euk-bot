@@ -4,13 +4,14 @@ Nextflow (DSL2) pipeline that processes paired-end metatranscriptome FASTQ into 
 
 ```mermaid
 flowchart LR
-    A[Raw FASTQ] --> B[FastQC] --> M[MultiQC]
-    A --> C[fastp] --> D[RiboDetector<br/>rRNA removal]
+    A[Raw FASTQ] --> B[FastQC] --> M[MultiQC raw]
+    A --> C[fastp<br/>adapter + quality trim] --> K[BBDuk<br/>PhiX, artifacts] --> D[RiboDetector<br/>rRNA removal]
     C --> M
-    D --> M
-    D --> E1[rnaSPAdes + MEGAHIT per sample<br/>+ MEGAHIT co-assembly per group]
+    D --> F[FastQC] --> M2[MultiQC clean]
+    D --> N[BBNorm<br/>assembler input only] --> F
+    N --> E1[rnaSPAdes + MEGAHIT per sample<br/>+ MEGAHIT co-assembly per group]
     E1 --> E2[MMseqs2 linclust<br/>pool + cluster]
-    E2 --> E3[TransDecoder]
+    E2 --> E3[TransDecoder<br/>+ MetaEuk optional]
     E3 --> E4[DIAMOND blastp<br/>+ eggNOG optional]
     E2 --> E5[salmon index]
     D --> E6[salmon quant] --> E7[merged count / TPM tables]
@@ -29,7 +30,8 @@ conf/
   slurm.config                SLURM executor, account/queue, per-node resource caps
   test.config                 tiny dataset for wiring checks
 subworkflows/local/
-  preliminary_qc.nf           step 1, Preliminary QC: FastQC, fastp, RiboDetector, MultiQC, per-sample QC table
+  preliminary_qc.nf           step 1, Preliminary QC: FastQC, fastp, BBDuk, RiboDetector, BBNorm, MultiQC before/after,
+                              per-sample QC table, read-loss check
   assembly.nf                 assembly -> cluster -> ORFs -> annotation -> salmon
   assembly_qc.nf              optional per-assembly QC (seqkit, read mapping rate, BUSCO)
   read_screening.nf           step 2, Read screening (optional): strandedness, sourmash, Nonpareil, Kaiju,
@@ -79,10 +81,17 @@ Common switches:
 | `--run_assembly_qc` | `false` | per-assembly contig stats, read mapping rate and (with `--busco_db_dir`) BUSCO, before clustering |
 | `--busco_db_dir` / `--busco_lineages` | none / `eukaryota_odb12` | BUSCO datasets from `download_busco.sbatch` |
 | `--eggnog_data_dir` | none | set it to run eggNOG-mapper on predicted proteins |
+| `--min_read_length` | `50` | fastp minimum length after trimming |
+| `--max_pct_removed_fastp` | `30` | QC check: if a sample loses more than this % of read pairs in fastp, the run stops after Preliminary QC (when `--min_read_length` > 36) so you can rerun with `--min_read_length 36 -resume`; at 36 or below it only warns |
+| `--trim_mean_quality` | `15` | fastp sliding-window (4 bp) quality trimming, like Trimmomatic `SLIDINGWINDOW:4:15` |
+| `--skip_bbduk` / `--bbduk_ref` | `false` / `phix,artifacts` | BBDuk PhiX + Illumina artifact filter (BBTools built-in references) |
+| `--skip_normalization` | `false` | BBNorm on the assembler input only (salmon and reference mapping use all clean reads) |
+| `--bbnorm_target` / `--bbnorm_mindepth` | `100` / `2` | BBNorm target k-mer depth; k-mers below mindepth ignored (BBNorm's default 5 drops rare transcripts) |
+| `--metaeuk_db` | none | MMseqs2 DB folder from `build_metaeuk_db.sbatch`; runs MetaEuk next to TransDecoder, both protein sets annotated |
 | `--skip_rrna_removal` | `false` | |
 | `--ribodetector_read_len` | `150` | set to the sequencing read length |
 | `--ribodetector_chunk_size` | `240` | lower if RiboDetector runs out of memory |
-| `--save_trimmed`, `--save_non_rrna` | `false` | publish intermediate reads |
+| `--save_trimmed`, `--save_non_rrna`, `--save_normalized` | `false` | publish intermediate reads |
 | `--save_rrna` | `true` | publish the rRNA reads removed by RiboDetector (`reads/rRNA/`) for separate 18S analysis |
 
 Wiring check (no tools run; run from repo root):
@@ -106,15 +115,18 @@ nextflow run main.nf -profile test -stub-run
 ```
 qc/read_profile/                read_profile.tsv, samplesheet_suggested.csv, sourmash_similarity.csv, per-sample Nonpareil/strandedness/Kaiju
 methods.txt                     software, versions and key arguments of each step the run used (written at launch)
-qc/preliminary_qc.tsv           per sample: raw read pairs split into removed by fastp / rRNA / non-rRNA (counts and
-                                % of raw, summing to 100), plus fastp quality metrics
-qc/{fastqc_raw,fastp,ribodetector,multiqc}/   ribodetector/rrna_summary.tsv = % rRNA per sample
+qc/preliminary_qc.tsv           per sample: raw read pairs split into removed by fastp / BBDuk / rRNA / non-rRNA (counts
+                                and % of raw, summing to 100), pairs kept by BBNorm, fastp quality metrics, qc_flag
+qc/multiqc/                     raw_multiqc_report.html (FastQC raw + fastp), clean_multiqc_report.html (FastQC of
+                                clean + normalized reads, BBDuk)
+qc/{fastqc_raw,fastqc_clean,fastp,bbduk,ribodetector,bbnorm}/   ribodetector/rrna_summary.tsv = % rRNA per sample
 reads/rRNA/                     <sample>.rRNA_{1,2}.fq.gz (with --save_rrna, default on)
 assembly/contigs/               <sample|coasm_group>.<assembler>.contigs.fa (IDs prefixed the same way)
 assembly/qc/                    assembly_qc.tsv: one row per assembly (contig stats, % reads mapped back, BUSCO), with --run_assembly_qc
 assembly/clustered/             clustered_contigs.fa, clustered_contigs_clusters.tsv (representative, member)
 assembly/transdecoder/          .pep / .cds / .gff3
-assembly/annotation/            proteins_vs_reference.tsv, eggNOG annotations
+assembly/metaeuk/               clustered_contigs.metaeuk.fas (proteins) / .codon.fas / .gff / .headersMap.tsv, with --metaeuk_db
+assembly/annotation/            <transdecoder|metaeuk>.proteins_vs_reference.tsv, <transdecoder|metaeuk>.emapper.annotations
 assembly/salmon/<sample>/       quant.sf
 assembly/tables/                salmon_numreads.tsv, salmon_tpm.tsv
 reference/diamond_blastx/       <sample>.blastx.tsv
@@ -142,6 +154,7 @@ bump `REF_VERSION` when a source changes, and cite the version used for a run.
 A copy of each version's manifest is kept in `assets/reference_db/euk-bot-ref.<version>.MANIFEST.txt`.
 `annotate_reference_db.sbatch` runs eggNOG-mapper over a version as a SLURM array (split, run, merge) into
 `<version>_eggnog/` beside it (KEGG KO/pathways, Pfam, COG, GO for every protein with an eggNOG hit).
+`build_metaeuk_db.sbatch` builds the MMseqs2 version of a version's proteins for MetaEuk (`<version>_mmseqs/`, `--metaeuk_db`).
 `reference_db_stats.sbatch` writes summary tables for a version (sizes, length distribution, per-organism
 taxonomy, Pfam coverage, and KEGG coverage once the eggNOG annotations exist) to
 `assets/reference_db/euk-bot-ref.<version>.stats/`.
@@ -151,4 +164,4 @@ Eukaryote lineages use PR2 ranks (MarFERReT's PR2 taxonomy; EukProt via PR2 genu
 ## TODO / next steps
 
 - Swap in EUKulele for consensus taxonomy on the assembly branch, if preferred.
-- Join `proteins_vs_reference.tsv` and the salmon tables into a contig-level taxonomy + function + counts table.
+- Join `<orf_caller>.proteins_vs_reference.tsv` and the salmon tables into a contig-level taxonomy + function + counts table.

@@ -2,11 +2,12 @@
 /*
  * euk-bot: metatranscriptome processing for paired-end FASTQ
  *
- *   PRELIMINARY_QC : FastQC -> fastp -> RiboDetector (rRNA removal) -> MultiQC, per-sample QC table
+ *   PRELIMINARY_QC : FastQC -> fastp (trimming) -> BBDuk (PhiX) -> RiboDetector (rRNA) -> FastQC; BBNorm for the
+ *                    assembler input; MultiQC before/after; per-sample QC table and read-loss check
  *   READ_SCREENING : optional pre-assembly screen (sourmash, Nonpareil, strandedness, Kaiju) and suggested
  *                    co-assembly groups
  *   ASSEMBLY       : per-sample (rnaSPAdes + MEGAHIT) and per-group co-assembly -> MMseqs2 clustering -> TransDecoder
- *                    -> DIAMOND/eggNOG annotation -> salmon quantification
+ *                    (+ MetaEuk) -> DIAMOND/eggNOG annotation -> salmon quantification
  *   REFERENCE_MAP  : DIAMOND blastx of reads against a reference protein DB
  * Each run writes <outdir>/methods.txt: software, versions and key arguments of every step it uses.
  */
@@ -65,7 +66,7 @@ workflow {
     }
 
     if (params.run_assembly) {
-        ASSEMBLY(PRELIMINARY_QC.out.reads)
+        ASSEMBLY(PRELIMINARY_QC.out.reads, PRELIMINARY_QC.out.assembly_reads)
     }
     if (params.run_reference) {
         REFERENCE_MAP(PRELIMINARY_QC.out.reads)

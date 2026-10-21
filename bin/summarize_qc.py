@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Per-sample read accounting for the preliminary QC step (fastp + RiboDetector).
+"""Per-sample read accounting for the preliminary QC step (fastp -> BBDuk -> RiboDetector, then BBNorm).
 
-Every raw read pair ends up in exactly one of: removed by fastp, rRNA (RiboDetector), or non-rRNA (kept for
-assembly and mapping). Their counts are given as pairs and as a percent of the sample's raw pairs, so
-pct_removed_fastp + pct_rrna + pct_non_rrna = 100. The fastp detail columns split pct_removed_fastp by reason
-(as a percent of raw reads). Without RiboDetector (--skip_rrna_removal) the rRNA columns are empty and every
-fastp-passed pair counts as non-rRNA.
+Every raw read pair ends up in exactly one of: removed by fastp, removed by BBDuk (PhiX / artifacts), rRNA
+(RiboDetector), or non-rRNA (the clean reads used by every later step). Counts are given as pairs and as a
+percent of the sample's raw pairs, so pct_removed_fastp + pct_removed_bbduk + pct_rrna + pct_non_rrna = 100.
+A step that was skipped has empty columns and removes nothing. BBNorm only thins the assembler input, so
+normalized_pairs / pct_normalized_of_non_rrna sit outside that sum.
+
+The fastp detail columns split pct_removed_fastp by reason (as a percent of raw reads). qc_flag marks samples
+that lost more than --max-pct-removed-fastp of their pairs in fastp.
 
 Output: one row per sample, sorted by sample.
 """
@@ -16,10 +19,12 @@ from pathlib import Path
 
 COLUMNS = [
     "sample", "raw_pairs",
-    "removed_fastp_pairs", "pct_removed_fastp", "rrna_pairs", "pct_rrna", "non_rrna_pairs", "pct_non_rrna",
-    "pct_low_quality", "pct_too_many_n", "pct_too_short", "pct_adapter_trimmed", "pct_rrna_of_fastp_passed",
+    "removed_fastp_pairs", "pct_removed_fastp", "removed_bbduk_pairs", "pct_removed_bbduk",
+    "rrna_pairs", "pct_rrna", "non_rrna_pairs", "pct_non_rrna",
+    "normalized_pairs", "pct_normalized_of_non_rrna",
+    "pct_low_quality", "pct_too_many_n", "pct_too_short", "pct_adapter_trimmed", "pct_rrna_of_rrna_input",
     "mean_read_length_raw", "mean_read_length_trimmed", "q30_pct_raw", "q30_pct_trimmed", "gc_pct_trimmed",
-    "duplication_pct", "insert_size_peak",
+    "duplication_pct", "insert_size_peak", "qc_flag",
 ]
 
 
@@ -49,35 +54,57 @@ def fastp_row(path):
     }
 
 
+def read_tsvs(paths):
+    rows = {}
+    for path in paths:
+        with open(path, newline="") as fh:
+            for rec in csv.DictReader(fh, delimiter="\t"):
+                rows[rec["sample"]] = rec
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--fastp", type=Path, nargs="+", required=True, help="<sample>.fastp.json files")
+    parser.add_argument("--bbduk", type=Path, nargs="*", default=[], help="<sample>.bbduk.tsv files")
     parser.add_argument("--rrna", type=Path, nargs="*", default=[], help="<sample>.ribodetector.tsv files")
+    parser.add_argument("--bbnorm", type=Path, nargs="*", default=[], help="<sample>.bbnorm.tsv files")
+    parser.add_argument("--max-pct-removed-fastp", type=float, default=30.0)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
-    rrna = {}
-    for path in args.rrna:
-        with open(path, newline="") as fh:
-            for rec in csv.DictReader(fh, delimiter="\t"):
-                rrna[rec["sample"]] = rec
+    bbduk, rrna, bbnorm = read_tsvs(args.bbduk), read_tsvs(args.rrna), read_tsvs(args.bbnorm)
 
     rows = []
     for path in args.fastp:
         sample = path.name.removesuffix(".fastp.json")
         f = fastp_row(path)
-        raw, passed = f.pop("raw_pairs"), f.pop("passed_pairs")
+        raw, after_fastp = f.pop("raw_pairs"), f.pop("passed_pairs")
+        after_bbduk = int(bbduk[sample]["kept_pairs"]) if sample in bbduk else after_fastp
         if sample in rrna:
-            non_rrna = int(rrna[sample]["non_rrna_pairs"])
-            n_rrna = int(rrna[sample]["input_pairs"]) - non_rrna
+            rrna_input, non_rrna = int(rrna[sample]["input_pairs"]), int(rrna[sample]["non_rrna_pairs"])
+            n_rrna = rrna_input - non_rrna
         else:
-            non_rrna, n_rrna = passed, None
+            rrna_input, non_rrna, n_rrna = None, after_bbduk, None
+        n_norm = int(bbnorm[sample]["normalized_pairs"]) if sample in bbnorm else None
+        removed_fastp = raw - after_fastp
+        pct_removed = pct(removed_fastp, raw)
+
+        def blank_if_none(value, fn=lambda v: v):
+            return "" if value is None else fn(value)
+
         rows.append({
             "sample": sample, "raw_pairs": raw,
-            "removed_fastp_pairs": raw - passed, "pct_removed_fastp": pct(raw - passed, raw),
-            "rrna_pairs": "" if n_rrna is None else n_rrna, "pct_rrna": "" if n_rrna is None else pct(n_rrna, raw),
+            "removed_fastp_pairs": removed_fastp, "pct_removed_fastp": pct_removed,
+            "removed_bbduk_pairs": after_fastp - after_bbduk if sample in bbduk else "",
+            "pct_removed_bbduk": pct(after_fastp - after_bbduk, raw) if sample in bbduk else "",
+            "rrna_pairs": blank_if_none(n_rrna), "pct_rrna": blank_if_none(n_rrna, lambda n: pct(n, raw)),
             "non_rrna_pairs": non_rrna, "pct_non_rrna": pct(non_rrna, raw),
-            "pct_rrna_of_fastp_passed": "" if n_rrna is None else pct(n_rrna, passed),
+            "normalized_pairs": blank_if_none(n_norm),
+            "pct_normalized_of_non_rrna": blank_if_none(n_norm, lambda n: pct(n, non_rrna)),
+            "pct_rrna_of_rrna_input": blank_if_none(n_rrna, lambda n: pct(n, rrna_input)),
+            "qc_flag": (f"removed_fastp>{args.max_pct_removed_fastp:g}%"
+                        if pct_removed != "" and pct_removed > args.max_pct_removed_fastp else ""),
             **f,
         })
 
