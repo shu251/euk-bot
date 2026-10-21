@@ -48,10 +48,10 @@ echo "== Run 1: default branches"
 nextflow run main.nf -profile test,${PROFILE} -stub-run -work-dir "${WORK_DIR}" \
     --outdir "${USER_SCRATCH}/euk-bot/results_prebuild"
 
-echo "== Run 2: optional steps: eggNOG-mapper, assembly QC, read profiling (data dirs are placeholders; stub only)"
+echo "== Run 2: optional steps: eggNOG-mapper, MetaEuk, assembly QC, read profiling (data dirs are placeholders; stub only)"
 nextflow run main.nf -profile test,${PROFILE} -stub-run -work-dir "${WORK_DIR}" \
     --outdir "${USER_SCRATCH}/euk-bot/results_prebuild" \
-    --eggnog_data_dir tests/data --run_assembly_qc --busco_db_dir tests/data \
+    --eggnog_data_dir tests/data --metaeuk_db tests/data --run_assembly_qc --busco_db_dir tests/data \
     --run_read_profiling --kaiju_db tests/data
 
 if [[ ${PROFILE} == singularity ]]; then
