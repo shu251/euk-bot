@@ -4,6 +4,7 @@ include { MEGAHIT         } from '../../modules/local/megahit'
 include { MMSEQS_LINCLUST } from '../../modules/local/mmseqs_linclust'
 include { ASSEMBLY_QC     } from './assembly_qc'
 include { TRANSDECODER   } from '../../modules/local/transdecoder'
+include { METAEUK        } from '../../modules/local/metaeuk'
 include { DIAMOND_BLASTP } from '../../modules/local/diamond_blastp'
 include { EGGNOG_MAPPER  } from '../../modules/local/eggnog_mapper'
 include { SALMON_INDEX   } from '../../modules/local/salmon_index'
@@ -17,7 +18,8 @@ include { MERGE_SALMON   } from '../../modules/local/merge_salmon'
  */
 workflow ASSEMBLY {
     take:
-    reads    // [meta, [R1, R2]]; meta.group is set when the samplesheet has a group column
+    reads            // [meta, [R1, R2]] clean reads, for quantification; meta.group is set when the samplesheet has a group column
+    assembly_reads   // [meta, [R1, R2]] assembler input: the clean reads, normalized by BBNorm unless skipped
 
     main:
     def assemblers    = params.assemblers.tokenize(',')*.trim()
@@ -27,13 +29,13 @@ workflow ASSEMBLY {
         error "Unknown assembler(s): ${unknown.join(', ')} (use rnaspades, megahit)"
     }
 
-    ch_rnaspades_in = 'rnaspades' in assemblers ? reads : channel.empty()
-    ch_megahit_in   = 'megahit' in assemblers ? reads : channel.empty()
-    ch_assembled_reads = reads    // reads behind each assembly, for assembly QC
+    ch_rnaspades_in = 'rnaspades' in assemblers ? assembly_reads : channel.empty()
+    ch_megahit_in   = 'megahit' in assemblers ? assembly_reads : channel.empty()
+    ch_assembled_reads = assembly_reads    // reads behind each assembly, for assembly QC
 
     // Co-assembly: pool the reads of each group with more than one sample
     if (co_assemblers) {
-        ch_group_reads = reads
+        ch_group_reads = assembly_reads
             .filter { meta, _reads -> meta.group }
             .map { meta, pair -> [meta.group, pair[0], pair[1]] }
             .groupTuple()
@@ -58,13 +60,20 @@ workflow ASSEMBLY {
     }
 
     MMSEQS_LINCLUST(ch_contigs.map { _meta, fa -> fa }.collect())
+    // ORFs: TransDecoder (ab initio), plus MetaEuk (reference homology) when --metaeuk_db is set; both
+    // protein sets are kept and annotated, named by ORF caller
     TRANSDECODER(MMSEQS_LINCLUST.out.fasta)
+    ch_pep = TRANSDECODER.out.pep.map { pep -> ['transdecoder', pep] }
+    if (params.metaeuk_db) {
+        METAEUK(MMSEQS_LINCLUST.out.fasta, file(params.metaeuk_db, checkIfExists: true))
+        ch_pep = ch_pep.mix(METAEUK.out.pep.map { pep -> ['metaeuk', pep] })
+    }
 
     if (params.reference_dmnd) {
-        DIAMOND_BLASTP(TRANSDECODER.out.pep, file(params.reference_dmnd, checkIfExists: true))
+        DIAMOND_BLASTP(ch_pep, file(params.reference_dmnd, checkIfExists: true))
     }
     if (params.eggnog_data_dir) {
-        EGGNOG_MAPPER(TRANSDECODER.out.pep, file(params.eggnog_data_dir, checkIfExists: true))
+        EGGNOG_MAPPER(ch_pep, file(params.eggnog_data_dir, checkIfExists: true))
     }
 
     SALMON_INDEX(MMSEQS_LINCLUST.out.fasta)
@@ -73,7 +82,7 @@ workflow ASSEMBLY {
 
     emit:
     contigs = MMSEQS_LINCLUST.out.fasta
-    pep     = TRANSDECODER.out.pep
+    pep     = ch_pep    // [orf_caller, proteins.fa]
     counts  = MERGE_SALMON.out.numreads
     tpm     = MERGE_SALMON.out.tpm
 }
