@@ -14,9 +14,10 @@ process NONPAREIL {
     path("${meta.id}.nonpareil.tsv"), emit: summary
 
     script:
+    def k = 24  // Nonpareil's default k-mer size; it exits if any read is shorter, so those are dropped first
     """
-    zcat ${reads[0]} > r1.fq
-    nonpareil -s r1.fq -T kmer -f fastq -b ${meta.id} -t ${task.cpus} -R ${task.memory.toMega()}
+    zcat ${reads[0]} | awk 'NR%4==1{h=\$0} NR%4==2{s=\$0} NR%4==3{p=\$0} NR%4==0 && length(s)>=${k}{print h"\\n"s"\\n"p"\\n"\$0}' > r1.fq
+    nonpareil -s r1.fq -T kmer -k ${k} -f fastq -b ${meta.id} -t ${task.cpus} -R ${task.memory.toMega()}
     rm r1.fq
 
     Rscript -e '
