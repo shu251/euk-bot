@@ -14,10 +14,10 @@
 # A chunk that finished is skipped if its array task is rerun. REF_VERSION=v2 for another version.
 #
 #SBATCH --job-name=euk-bot-refnog
-#SBATCH --time=1-00:00:00
+#SBATCH --time=06:00:00     # chunk_000 (2M proteins) took 2h06 on 48 cores
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=48
-#SBATCH --mem=120G
+#SBATCH --mem=64G          # chunk_000 peaked at 41.5 GB
 #SBATCH --output=euk-bot-refnog_%A_%a.log
 #SBATCH --account=132704181195
 #SBATCH --partition=medium
