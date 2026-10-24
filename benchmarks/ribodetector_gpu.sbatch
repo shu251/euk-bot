@@ -2,7 +2,9 @@
 # Stand-alone benchmark, not part of the pipeline: RiboDetector GPU mode on one sample, compared with the
 # pipeline's CPU run (RIBODETECTOR, 12 cores, ~6.3 h and ~62 CPU-h per sample in test3).
 # Input is the same BBDuk output the CPU task used, read from that task's work dir, with the same settings
-# (ribodetector 0.3.0, -l 150, -e rrna, gzipped output) so only the device differs.
+# (-l 150, -e rrna, gzipped output) so only the device differs. GPU mode needs ribodetector >= 0.3.3: 0.3.0 crashes
+# on GPU with "indices should be either on cpu or on the same device" (fixed upstream 2026-02-05). The CPU run used
+# 0.3.0; the model is the same, so the comparison still holds.
 #
 # The first run builds a CUDA conda env on personal scratch (~20 min, once). It is built on the GPU node so
 # the CUDA build matches the node's driver.
@@ -27,7 +29,8 @@ READ_LEN=${READ_LEN:-150}       # params.ribodetector_read_len
 CHUNK_SIZE=${CHUNK_SIZE:-256}
 
 USER_SCRATCH=${USER_SCRATCH:-/scratch/user/${USER}}
-ENV=${USER_SCRATCH}/.cache/euk-bot/ribodetector_gpu_env
+RD_VERSION=${RD_VERSION:-0.3.3}
+ENV=${USER_SCRATCH}/.cache/euk-bot/ribodetector_gpu_env_${RD_VERSION}
 export CONDA_PKGS_DIRS=${USER_SCRATCH}/.cache/conda_pkgs
 
 R1=$(ls "${CPU_WORK}"/*_bbduk_1.fq.gz)
@@ -49,7 +52,7 @@ GPU_MEM=$(( GPU_GB * 3 / 4 ))   # -m: GPU RAM RiboDetector may use; leave headro
 if [[ ! -x ${ENV}/bin/ribodetector ]]; then
     echo "== $(date +%T) building ${ENV} (CUDA ${CUDA_DRIVER})"
     CONDA_OVERRIDE_CUDA=${CUDA_DRIVER} conda create -y -p "${ENV}" --override-channels -c conda-forge -c bioconda \
-        ribodetector=0.3.0 'pytorch=*=cuda*'
+        ribodetector=${RD_VERSION} 'pytorch=*=cuda*'
 fi
 "${ENV}/bin/python" -c 'import torch; assert torch.cuda.is_available(), "no CUDA in torch"; print("torch", torch.__version__, torch.cuda.get_device_name(0))'
 
