@@ -13,6 +13,12 @@
 # (the #SBATCH resources below are for the run step)
 # A chunk that finished is skipped if its array task is rerun. REF_VERSION=v2 for another version.
 #
+# A chunk that keeps timing out (v1: chunks 14 and 15 ran > 12 h in DIAMOND) can be cut into parts of
+# SUB_PROTEINS proteins (default 250k, so 8 parts of a 2M chunk) and the parts run as their own array:
+#   bash annotate_reference_db.sbatch resplit 14              # login node is fine; prints the array command
+#   sbatch --array=0-7%8 annotate_reference_db.sbatch run 14  # parts chunk_014_00 .. chunk_014_07
+# merge then picks up the parts like any other chunk.
+#
 #SBATCH --job-name=euk-bot-refnog
 #SBATCH --time=06:00:00     # chunk_000 (2M proteins) took 2h06 on 48 cores
 #SBATCH --ntasks=1
@@ -24,7 +30,7 @@
 
 set -euo pipefail
 
-STEP=${1:?"usage: sbatch annotate_reference_db.sbatch split|run|merge"}
+STEP=${1:?"usage: sbatch annotate_reference_db.sbatch split|run [chunk]|resplit <chunk>|merge"}
 REF_VERSION=${REF_VERSION:-v1}
 DB=/scratch/group/hu-lab/databases
 PREFIX=${DB}/euk-bot-ref/${REF_VERSION}/euk-bot-ref.${REF_VERSION}
@@ -32,6 +38,7 @@ EGGNOG_DATA=${EGGNOG_DATA:-${DB}/eggnog}
 OUT_DIR=${DB}/euk-bot-ref/${REF_VERSION}_eggnog
 WORK=${USER_SCRATCH:-/scratch/user/${USER}}/euk-bot/refdb_eggnog/${REF_VERSION}
 CHUNK_PROTEINS=${CHUNK_PROTEINS:-2000000}
+SUB_PROTEINS=${SUB_PROTEINS:-250000}
 ENVS=/scratch/group/hu-lab/.cache/euk-bot/conda_envs
 IMAGES=/scratch/group/hu-lab/.cache/euk-bot/singularity_images
 
@@ -51,8 +58,28 @@ split)
     echo "next: sbatch --array=0 annotate_reference_db.sbatch run, then --array=1-$((n - 1))%8"
     ;;
 
+resplit)
+    PARENT=$(printf "chunk_%03d" "$((10#${2:?"usage: annotate_reference_db.sbatch resplit <chunk number>"}))")
+    [[ -s ${WORK}/chunks/${PARENT}.faa ]] || { echo "${WORK}/chunks/${PARENT}.faa not found (already resplit?)" >&2; exit 1; }
+    [[ -e ${WORK}/out/${PARENT}.done ]] && { echo "${PARENT} is already done; nothing to resplit" >&2; exit 1; }
+    split -l $((SUB_PROTEINS * 2)) -d -a 2 --additional-suffix=.faa "${WORK}/chunks/${PARENT}.faa" "${WORK}/chunks/${PARENT}_"
+    # Move the parent and any partial output of the timed-out runs out of the chunk_* globs merge counts
+    mkdir -p "${WORK}/resplit"
+    mv "${WORK}/chunks/${PARENT}.faa" "${WORK}/resplit/"
+    find "${WORK}/out" -maxdepth 1 -name "${PARENT}.emapper.*" -exec mv {} "${WORK}/resplit/" \;
+    n=$(find "${WORK}/chunks" -name "${PARENT}_*.faa" | wc -l)
+    echo "${PARENT} split into ${n} parts of up to ${SUB_PROTEINS} proteins; original in ${WORK}/resplit"
+    echo "next: sbatch --array=0-$((n - 1))%8 annotate_reference_db.sbatch run $((10#${2}))"
+    ;;
+
 run)
-    CHUNK=$(printf "chunk_%03d" "${SLURM_ARRAY_TASK_ID:?run as an array job: sbatch --array=...}")
+    TASK=${SLURM_ARRAY_TASK_ID:?run as an array job: sbatch --array=...}
+    if [[ -n ${2:-} ]]; then
+        CHUNK=$(printf "chunk_%03d_%02d" "$((10#${2}))" "${TASK}")   # a part from resplit
+    else
+        CHUNK=$(printf "chunk_%03d" "${TASK}")
+    fi
+    [[ -s ${WORK}/chunks/${CHUNK}.faa ]] || { echo "${WORK}/chunks/${CHUNK}.faa not found" >&2; exit 1; }
     [[ -e ${WORK}/out/${CHUNK}.done ]] && { echo "${CHUNK} already done"; exit 0; }
     for f in eggnog.db eggnog_proteins.dmnd eggnog.taxa.db; do
         [[ -s ${EGGNOG_DATA}/${f} ]] || { echo "${EGGNOG_DATA}/${f} missing; run download_eggnog.sbatch" >&2; exit 1; }
@@ -123,6 +150,6 @@ merge)
     ;;
 
 *)
-    echo "unknown step '${STEP}': split, run or merge" >&2; exit 1
+    echo "unknown step '${STEP}': split, run, resplit or merge" >&2; exit 1
     ;;
 esac
