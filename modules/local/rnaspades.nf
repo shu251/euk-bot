@@ -1,3 +1,5 @@
+// Stranded libraries (meta.strandedness rf or fr) are assembled with --ss, which keeps sense and antisense
+// transcripts apart and writes contigs in the transcript's orientation.
 process RNASPADES {
     tag "${meta.id}"
     label 'process_high'
@@ -13,13 +15,14 @@ process RNASPADES {
 
     script:
     def args = task.ext.args ?: ''
+    def ss   = meta.strandedness in ['rf', 'fr'] ? "--ss ${meta.strandedness}" : ''
     """
     rnaspades.py \\
         -1 ${reads[0]} -2 ${reads[1]} \\
         -o spades_out \\
         -t ${task.cpus} \\
         -m ${task.memory.toGiga()} \\
-        ${args}
+        ${ss} ${args}
 
     # Prefix contig IDs with the sample (or group) and assembler so they stay unique after pooling
     awk -v s=${meta.id}_rnaspades '/^>/ { print ">" s "_" substr(\$1, 2); next } { print }' \\

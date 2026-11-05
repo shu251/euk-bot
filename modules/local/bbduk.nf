@@ -24,7 +24,21 @@ process BBDUK {
         ref=${params.bbduk_ref} k=31 hdist=1 \\
         stats=${meta.id}.bbduk_contaminants.txt \\
         threads=${task.cpus} \\
-        2> ${meta.id}.bbduk.log
+        2> ${meta.id}.bbduk.log &
+    pid=\$!
+
+    # Fail-safe, as in BBNORM: if BBTools' worker threads crash, the main thread waits forever and the task hangs
+    # until the walltime. Stop as soon as the log shows a crashed thread.
+    while kill -0 \$pid 2> /dev/null; do
+        if grep -q 'Exception in thread' ${meta.id}.bbduk.log; then
+            pkill -P \$pid 2> /dev/null || true
+            kill \$pid 2> /dev/null || true
+            echo "BBDuk worker thread crashed; stopped early. See ${meta.id}.bbduk.log" >&2
+            exit 1
+        fi
+        sleep 30
+    done
+    wait \$pid
 
     # Read pairs in vs. kept
     n_in=\$(( \$(zcat ${reads[0]} | wc -l) / 4 ))

@@ -12,7 +12,7 @@ process STRANDEDNESS {
     path(db)
 
     output:
-    path("${meta.id}.strandedness.tsv"), emit: summary
+    tuple val(meta), path("${meta.id}.strandedness.tsv"), emit: summary
 
     script:
     def n_reads = params.strand_check_reads
