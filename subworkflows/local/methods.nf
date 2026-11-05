@@ -41,6 +41,17 @@ def manifestLines(dir, stopAt) {
     return manifest.readLines().takeWhile { line -> !line.startsWith(stopAt) }.findAll { line -> line.trim() }
 }
 
+// The strandedness check (STRANDEDNESS), described once: under Read screening, or under Assembly when only rnaSPAdes uses it
+def addStrandedness(ctx, strand_db) {
+    addTool(ctx, 'STRANDEDNESS', 'DIAMOND (strandedness)', [
+        "blastx --fast --evalue 1e-5 --max-target-seqs 1 of the first ${params.strand_check_reads} R1 reads against",
+        "${strand_db}.",
+        "Library strandedness from the reading frame of each read's best hit:",
+        'fr if >= 80% of reads with a hit are sense, rf if <= 20%, otherwise unstranded (< 1000 hits: not called).',
+        'Per sample in qc/read_profile/<sample>.strandedness.tsv.',
+    ])
+}
+
 // methods.txt is built up in ctx: [out: lines, step: section number, software: moduleSoftware(), engine: ...]
 def addSection(ctx, title) {
     ctx.step += 1
@@ -136,21 +147,17 @@ def writeMethods() {
     ])
 
     // 2. Read screening
-    if (params.run_read_profiling || params.stop_after_profiling) {
+    def strand_db = params.strand_check_dmnd ?: params.reference_dmnd
+    def profiling = params.run_read_profiling || params.stop_after_profiling
+    if (profiling) {
         addSection(ctx, 'Read screening')
         addTool(ctx, 'SOURMASH_SKETCH', 'sourmash', [
             'sourmash sketch dna -p k=31,scaled=1000,abund: both mates of the QC\'d reads in one signature per sample.',
             'sourmash compare -k 31: pairwise abundance-weighted (angular) similarity, sourmash_similarity.csv.',
         ])
         addTool(ctx, 'NONPAREIL', 'Nonpareil', ['nonpareil -T kmer on R1 of the QC\'d reads: coverage, redundancy, diversity.'])
-        def strand_db = params.strand_check_dmnd ?: params.reference_dmnd
         if (strand_db) {
-            addTool(ctx, 'STRANDEDNESS', 'DIAMOND (strandedness)', [
-                "blastx --fast --evalue 1e-5 --max-target-seqs 1 of the first ${params.strand_check_reads} R1 reads against",
-                "${strand_db}.",
-                "Library strandedness from the reading frame of each read's best hit:",
-                'fr if >= 80% of reads with a hit are sense, rf if <= 20%, otherwise unstranded (< 1000 hits: not called).',
-            ])
+            addStrandedness(ctx, strand_db)
         }
         if (params.kaiju_db) {
             addTool(ctx, 'KAIJU', 'Kaiju', ["kaiju -a greedy -e 5, read pairs against ${params.kaiju_db}; kaiju2table -r superkingdom."])
@@ -172,14 +179,28 @@ def writeMethods() {
         def assemblers    = params.assemblers.tokenize(',')*.trim()
         def co_assemblers = params.coassembly_assemblers ? params.coassembly_assemblers.tokenize(',')*.trim() : []
         addSection(ctx, 'Assembly')
+        def auto_strand = params.strandedness == 'auto' && strand_db
+        if (auto_strand && !profiling && 'rnaspades' in (assemblers + co_assemblers)) {
+            addStrandedness(ctx, strand_db)
+        }
+        def library = params.strandedness == 'auto'
+            ? (auto_strand
+                ? ["Library type per sample from the strandedness check: --ss rf or --ss fr where called, otherwise unstranded;",
+                   'a co-assembly is stranded only if all its samples have the same call (--strandedness auto).']
+                : ['All samples assembled as unstranded (--strandedness auto, but no protein DB for the strandedness check).'])
+            : params.strandedness == 'unstranded'
+                ? ['All samples assembled as unstranded (--strandedness unstranded).']
+                : ["All samples assembled with --ss ${params.strandedness} (--strandedness ${params.strandedness})."]
         ['rnaspades', 'megahit'].each { a ->
             def scope = [assemblers.contains(a) ? 'each sample' : null,
                          co_assemblers.contains(a) ? 'each samplesheet group (co-assembly)' : null].findAll { x -> x }
             if (scope) {
                 def process = a == 'rnaspades' ? 'RNASPADES' : 'MEGAHIT'
                 def label   = a == 'rnaspades' ? 'rnaSPAdes (SPAdes)' : 'MEGAHIT'
-                addTool(ctx, process, label, ["Default settings; assembles ${scope.join(' and ')}" +
-                    (normalize ? ' from BBNorm-normalized reads.' : ' from the clean reads.')])
+                def notes = ["Default settings; assembles ${scope.join(' and ')}" +
+                    (normalize ? ' from BBNorm-normalized reads.' : ' from the clean reads.')]
+                notes += a == 'rnaspades' ? library : ['No stranded mode; contigs come out in either orientation.']
+                addTool(ctx, process, label, notes)
             }
         }
         if (co_assemblers) {

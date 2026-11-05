@@ -15,11 +15,13 @@ include { MERGE_SALMON   } from '../../modules/local/merge_salmon'
  * Each sample is assembled with every assembler in --assemblers, and samples sharing a samplesheet
  * group (e.g. a vent site) are also co-assembled with --coassembly_assemblers. All contigs are pooled
  * and clustered into one non-redundant reference, so every sample is quantified against the same set.
+ * rnaSPAdes is told the library type (meta.strandedness -> --ss); MEGAHIT has no stranded mode.
  */
 workflow ASSEMBLY {
     take:
     reads            // [meta, [R1, R2]] clean reads, for quantification; meta.group is set when the samplesheet has a group column
     assembly_reads   // [meta, [R1, R2]] assembler input: the clean reads, normalized by BBNorm unless skipped
+    strand_calls     // [sample id, call] from STRANDEDNESS; empty when it did not run
 
     main:
     def assemblers    = params.assemblers.tokenize(',')*.trim()
@@ -29,18 +31,32 @@ workflow ASSEMBLY {
         error "Unknown assembler(s): ${unknown.join(', ')} (use rnaspades, megahit)"
     }
 
-    ch_rnaspades_in = 'rnaspades' in assemblers ? assembly_reads : channel.empty()
-    ch_megahit_in   = 'megahit' in assemblers ? assembly_reads : channel.empty()
-    ch_assembled_reads = assembly_reads    // reads behind each assembly, for assembly QC
+    // Library type per sample: --strandedness rf|fr|unstranded for all, or with auto the sample's own call
+    // (unstranded when there is no rf/fr call, e.g. too_few_hits or no strandedness check)
+    ch_assembly_reads = assembly_reads.map { meta, pair -> [meta + [strandedness: params.strandedness], pair] }
+    if (params.strandedness == 'auto') {
+        ch_assembly_reads = assembly_reads
+            .map { meta, pair -> [meta.id, meta, pair] }
+            .join(strand_calls, remainder: true)
+            .filter { row -> row[1] instanceof Map }    // drop calls without assembler input (none expected)
+            .map { _id, meta, pair, call -> [meta + [strandedness: call in ['rf', 'fr'] ? call : 'unstranded'], pair] }
+    }
 
-    // Co-assembly: pool the reads of each group with more than one sample
+    ch_rnaspades_in = 'rnaspades' in assemblers ? ch_assembly_reads : channel.empty()
+    ch_megahit_in   = 'megahit' in assemblers ? ch_assembly_reads : channel.empty()
+    ch_assembled_reads = ch_assembly_reads    // reads behind each assembly, for assembly QC
+
+    // Co-assembly: pool the reads of each group with more than one sample; stranded only if all its samples agree
     if (co_assemblers) {
-        ch_group_reads = assembly_reads
+        ch_group_reads = ch_assembly_reads
             .filter { meta, _reads -> meta.group }
-            .map { meta, pair -> [meta.group, pair[0], pair[1]] }
+            .map { meta, pair -> [meta.group, meta.strandedness, pair[0], pair[1]] }
             .groupTuple()
-            .filter { _group, r1s, _r2s -> r1s.size() > 1 }
-            .map { group, r1s, r2s -> [[id: "coasm_${group}", group: group], r1s, r2s] }
+            .filter { _group, _strands, r1s, _r2s -> r1s.size() > 1 }
+            .map { group, strands, r1s, r2s ->
+                def strandedness = strands.toUnique().size() == 1 ? strands[0] : 'unstranded'
+                [[id: "coasm_${group}", group: group, strandedness: strandedness], r1s, r2s]
+            }
         CAT_GROUP_READS(ch_group_reads)
         ch_assembled_reads = ch_assembled_reads.mix(CAT_GROUP_READS.out.reads)
         if ('rnaspades' in co_assemblers) {
