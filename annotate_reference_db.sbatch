@@ -17,6 +17,13 @@
 # SUB_PROTEINS proteins (default 250k, so 8 parts of a 2M chunk) and the parts run as their own array:
 #   bash annotate_reference_db.sbatch resplit 14              # login node is fine; prints the array command
 #   sbatch --array=0-7%8 annotate_reference_db.sbatch run 14  # parts chunk_014_00 .. chunk_014_07
+# A part that still times out (v1: 014_06, 015_01, 015_03 ran > 6 h twice; other parts 40 min - 3.5 h) can be
+# resplit the same way into sub-parts of 25k proteins (SUB_PROTEINS):
+#   bash annotate_reference_db.sbatch resplit 14_06           # sub-parts chunk_014_06_00 ..
+#   sbatch --array=0-<last>%8 annotate_reference_db.sbatch run 14_06
+# Either way, proteins longer than LONG_AA (default 5000 aa; 0 = off) go into one last sub-part of their own,
+# so that a few very long proteins don't hold up the rest. resplit prints which index that is, so it can get
+# a longer --time.
 # merge then picks up the parts like any other chunk.
 #
 #SBATCH --job-name=euk-bot-refnog
@@ -38,11 +45,18 @@ EGGNOG_DATA=${EGGNOG_DATA:-${DB}/eggnog}
 OUT_DIR=${DB}/euk-bot-ref/${REF_VERSION}_eggnog
 WORK=${USER_SCRATCH:-/scratch/user/${USER}}/euk-bot/refdb_eggnog/${REF_VERSION}
 CHUNK_PROTEINS=${CHUNK_PROTEINS:-2000000}
-SUB_PROTEINS=${SUB_PROTEINS:-250000}
+LONG_AA=${LONG_AA:-5000}
 ENVS=/scratch/group/hu-lab/.cache/euk-bot/conda_envs
 IMAGES=/scratch/group/hu-lab/.cache/euk-bot/singularity_images
 
 umask 002   # keep shared databases group-readable
+
+# Chunk name from a resplit argument: 14 -> chunk_014, 14_06 -> chunk_014_06
+parent_name() {
+    local part=""
+    [[ $1 == *_* ]] && part=$(printf "_%02d" "$((10#${1#*_}))")
+    printf "chunk_%03d%s" "$((10#${1%%_*}))" "${part}"
+}
 
 case ${STEP} in
 split)
@@ -59,23 +73,46 @@ split)
     ;;
 
 resplit)
-    PARENT=$(printf "chunk_%03d" "$((10#${2:?"usage: annotate_reference_db.sbatch resplit <chunk number>"}))")
+    ARG=${2:?"usage: annotate_reference_db.sbatch resplit <chunk>[_<part>], e.g. 14 or 14_06"}
+    [[ ${ARG} =~ ^[0-9]+(_[0-9]+)?$ ]] || { echo "resplit takes a chunk (14) or a part (14_06), not '${ARG}'" >&2; exit 1; }
+    PARENT=$(parent_name "${ARG}")
+    [[ ${ARG} == *_* ]] && SUB=${SUB_PROTEINS:-25000} || SUB=${SUB_PROTEINS:-250000}
     [[ -s ${WORK}/chunks/${PARENT}.faa ]] || { echo "${WORK}/chunks/${PARENT}.faa not found (already resplit?)" >&2; exit 1; }
     [[ -e ${WORK}/out/${PARENT}.done ]] && { echo "${PARENT} is already done; nothing to resplit" >&2; exit 1; }
-    split -l $((SUB_PROTEINS * 2)) -d -a 2 --additional-suffix=.faa "${WORK}/chunks/${PARENT}.faa" "${WORK}/chunks/${PARENT}_"
+    compgen -G "${WORK}/chunks/${PARENT}_*.faa" > /dev/null && { echo "${PARENT}_* parts already exist" >&2; exit 1; }
+    # Records are two lines (header, sequence). Proteins longer than LONG_AA go, in input order, into one
+    # extra sub-part after the regular ones.
+    awk -v sub_n="${SUB}" -v long_aa="${LONG_AA}" -v pre="${WORK}/chunks/${PARENT}_" '
+        /^>/ { h = $0; next }
+        long_aa > 0 && length($0) > long_aa { long[++n_long] = h "\n" $0; next }
+        {
+            i = int(k++ / sub_n)
+            if (i != last) { if (out) close(out); last = i }
+            out = sprintf("%s%02d.faa", pre, i)
+            print h > out; print $0 > out
+        }
+        END {
+            if (out) close(out)
+            n_parts = k ? int((k - 1) / sub_n) + 1 : 0
+            if (n_long) {
+                out = sprintf("%s%02d.faa", pre, n_parts)
+                for (j = 1; j <= n_long; j++) print long[j] > out
+                printf "%d proteins > %d aa in %s\n", n_long, long_aa, out > "/dev/stderr"
+            }
+        }' last=-1 "${WORK}/chunks/${PARENT}.faa"
     # Move the parent and any partial output of the timed-out runs out of the chunk_* globs merge counts
     mkdir -p "${WORK}/resplit"
     mv "${WORK}/chunks/${PARENT}.faa" "${WORK}/resplit/"
     find "${WORK}/out" -maxdepth 1 -name "${PARENT}.emapper.*" -exec mv {} "${WORK}/resplit/" \;
-    n=$(find "${WORK}/chunks" -name "${PARENT}_*.faa" | wc -l)
-    echo "${PARENT} split into ${n} parts of up to ${SUB_PROTEINS} proteins; original in ${WORK}/resplit"
-    echo "next: sbatch --array=0-$((n - 1))%8 annotate_reference_db.sbatch run $((10#${2}))"
+    n=$(( $(compgen -G "${WORK}/chunks/${PARENT}_*.faa" | wc -l) ))
+    echo "${PARENT} split into ${n} parts (up to ${SUB} proteins each, long ones last); original in ${WORK}/resplit"
+    echo "next: sbatch --array=0-$((n - 1))%8 annotate_reference_db.sbatch run ${ARG}"
     ;;
 
 run)
     TASK=${SLURM_ARRAY_TASK_ID:?run as an array job: sbatch --array=...}
     if [[ -n ${2:-} ]]; then
-        CHUNK=$(printf "chunk_%03d_%02d" "$((10#${2}))" "${TASK}")   # a part from resplit
+        CHUNK=$(printf "%s_%02d" "$(parent_name "${2}")" "${TASK}")   # a part (or sub-part) from resplit
     else
         CHUNK=$(printf "chunk_%03d" "${TASK}")
     fi
