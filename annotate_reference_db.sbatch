@@ -24,6 +24,11 @@
 # Either way, proteins longer than LONG_AA (default 5000 aa; 0 = off) go into one last sub-part of their own,
 # so that a few very long proteins don't hold up the rest. resplit prints which index that is, so it can get
 # a longer --time.
+# A long-protein sub-part that still times out (v1: 014_06_10, 015_01_10, 015_03_10, 344-668 proteins of
+# 5-33 kaa, ran > 12 h with no hits written) can be resplit once more into pieces of 25 proteins (SUB_PROTEINS),
+# with no further long-protein split, and run with medium's full 24 h:
+#   bash annotate_reference_db.sbatch resplit 14_06_10        # pieces chunk_014_06_10_00 ..
+#   sbatch --array=0-<last>%8 --time=24:00:00 annotate_reference_db.sbatch run 14_06_10
 # merge then picks up the parts like any other chunk.
 #
 #SBATCH --job-name=euk-bot-refnog
@@ -51,11 +56,12 @@ IMAGES=/scratch/group/hu-lab/.cache/euk-bot/singularity_images
 
 umask 002   # keep shared databases group-readable
 
-# Chunk name from a resplit argument: 14 -> chunk_014, 14_06 -> chunk_014_06
+# Chunk name from a resplit argument: 14 -> chunk_014, 14_06 -> chunk_014_06, 14_06_10 -> chunk_014_06_10
 parent_name() {
-    local part=""
-    [[ $1 == *_* ]] && part=$(printf "_%02d" "$((10#${1#*_}))")
-    printf "chunk_%03d%s" "$((10#${1%%_*}))" "${part}"
+    local IFS=_ p x
+    read -ra p <<< "$1"
+    printf "chunk_%03d" "$((10#${p[0]}))"
+    for x in "${p[@]:1}"; do printf "_%02d" "$((10#${x}))"; done
 }
 
 case ${STEP} in
@@ -73,16 +79,22 @@ split)
     ;;
 
 resplit)
-    ARG=${2:?"usage: annotate_reference_db.sbatch resplit <chunk>[_<part>], e.g. 14 or 14_06"}
-    [[ ${ARG} =~ ^[0-9]+(_[0-9]+)?$ ]] || { echo "resplit takes a chunk (14) or a part (14_06), not '${ARG}'" >&2; exit 1; }
+    ARG=${2:?"usage: annotate_reference_db.sbatch resplit <chunk>[_<part>[_<sub-part>]], e.g. 14, 14_06 or 14_06_10"}
+    [[ ${ARG} =~ ^[0-9]+(_[0-9]+){0,2}$ ]] || { echo "resplit takes a chunk (14), a part (14_06) or a sub-part (14_06_10), not '${ARG}'" >&2; exit 1; }
     PARENT=$(parent_name "${ARG}")
-    [[ ${ARG} == *_* ]] && SUB=${SUB_PROTEINS:-25000} || SUB=${SUB_PROTEINS:-250000}
+    # Default piece size by depth; a sub-part (already all long proteins) gets no further long-protein split
+    LONG=${LONG_AA}
+    case ${ARG//[0-9]/} in
+        "")  SUB=${SUB_PROTEINS:-250000} ;;
+        _)   SUB=${SUB_PROTEINS:-25000} ;;
+        __)  SUB=${SUB_PROTEINS:-25}; LONG=0 ;;
+    esac
     [[ -s ${WORK}/chunks/${PARENT}.faa ]] || { echo "${WORK}/chunks/${PARENT}.faa not found (already resplit?)" >&2; exit 1; }
     [[ -e ${WORK}/out/${PARENT}.done ]] && { echo "${PARENT} is already done; nothing to resplit" >&2; exit 1; }
     compgen -G "${WORK}/chunks/${PARENT}_*.faa" > /dev/null && { echo "${PARENT}_* parts already exist" >&2; exit 1; }
     # Records are two lines (header, sequence). Proteins longer than LONG_AA go, in input order, into one
     # extra sub-part after the regular ones.
-    awk -v sub_n="${SUB}" -v long_aa="${LONG_AA}" -v pre="${WORK}/chunks/${PARENT}_" '
+    awk -v sub_n="${SUB}" -v long_aa="${LONG}" -v pre="${WORK}/chunks/${PARENT}_" '
         /^>/ { h = $0; next }
         long_aa > 0 && length($0) > long_aa { long[++n_long] = h "\n" $0; next }
         {
@@ -162,7 +174,9 @@ merge)
     ANNOT=${OUT_DIR}/euk-bot-ref.${REF_VERSION}.emapper.annotations.tsv.gz
 
     # One header ("#query ..."), then the data rows of every chunk; "##" comment lines dropped
-    first=$(ls "${WORK}"/out/chunk_*.emapper.annotations | head -1)
+    # (a glob, not ls | head: head closing the pipe gives ls SIGPIPE, which pipefail + set -e turn into a silent exit)
+    annots=("${WORK}"/out/chunk_*.emapper.annotations)
+    first=${annots[0]}
     { grep -m1 '^#query' "${first}"; grep -hv '^#' "${WORK}"/out/chunk_*.emapper.annotations; } | gzip -c > "${ANNOT}"
 
     n_proteins=$(grep -c '^>' "${WORK}"/chunks/chunk_*.faa | awk -F: '{n += $NF} END {print n}')
@@ -172,7 +186,7 @@ merge)
         echo "merged:  $(date)  by ${USER}  (SLURM job ${SLURM_JOB_ID:-none})"
         echo "euk-bot: $(git rev-parse --short HEAD)$(git diff --quiet || echo ' + uncommitted changes')"
         echo "eggNOG-mapper version and settings: see the header of any ${WORK}/out/chunk_*.emapper.annotations"
-        sed -n 's/^## //p' "${first}" | head -8
+        awk '/^## / && n++ < 8 { sub(/^## /, ""); print }' "${first}"
         echo
         echo "eggNOG data:"
         ls -l "${EGGNOG_DATA}"
