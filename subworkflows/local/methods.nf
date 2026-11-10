@@ -244,9 +244,18 @@ def writeMethods() {
             addSection(ctx, 'Annotation')
             if (params.reference_dmnd) {
                 addTool(ctx, 'DIAMOND_BLASTP', 'DIAMOND', [
-                    "blastp --sensitive --evalue ${params.diamond_evalue} --max-target-seqs 1: predicted proteins",
+                    "blastp --sensitive --evalue ${params.diamond_evalue} --max-target-seqs ${params.eukulele_db ? 100 : 1}: predicted proteins",
                     "(${params.metaeuk_db ? 'TransDecoder and MetaEuk, separately' : 'TransDecoder'}) against ${params.reference_dmnd}.",
                 ])
+                if (params.eukulele_db) {
+                    addTool(ctx, 'EUKULELE', 'EUKulele', [
+                        'EUKulele all --mets_or_mags mets --no_busco, default cutoffs (tax-cutoffs.yaml: species 95, genus 80,',
+                        'family 65, order 50, class 30, division 20, supergroup 15, domain 5 % identity; --consensus_cutoff 0.75,',
+                        '--consensus_proportion 1): consensus taxonomy of each protein from the DIAMOND hits above',
+                        "(EUKulele's own DIAMOND step reuses them), with the reference taxonomy in ${params.eukulele_db}.",
+                    ])
+                    manifestLines(params.eukulele_db, '== rank rules').each { line -> out << "    ${line}" }
+                }
             }
             if (params.eggnog_data_dir) {
                 addTool(ctx, 'EGGNOG_MAPPER', 'eggNOG-mapper', [
@@ -261,6 +270,16 @@ def writeMethods() {
             'salmon index on the clustered contigs; salmon quant -l A --validateMappings per sample.',
         ])
         addScript(ctx, 'bin/merge_salmon.py', ['Merged NumReads and TPM tables: assembly/tables/.'])
+        def joined = [params.reference_dmnd ? 'best reference hit (highest bitscore)' : null,
+                      params.reference_dmnd && params.reference_taxonomy ? "its taxonomy (${params.reference_taxonomy})" : null,
+                      params.reference_dmnd && params.reference_annotations ? "its eggNOG annotation (${params.reference_annotations})" : null,
+                      params.reference_dmnd && params.eukulele_db ? 'EUKulele consensus taxonomy' : null,
+                      params.eggnog_data_dir ? "the protein's own eggNOG-mapper annotation" : null].findAll { x -> x }
+        addScript(ctx, 'bin/build_contig_table.py', [
+            'assembly/tables/contig_table.tsv: one row per clustered contig with its representative protein',
+            '(best reference hit, then eggNOG-annotated, then longest) and NumReads per sample;',
+            'assembly/tables/protein_table.tsv: one row per protein.',
+        ] + (joined ? ['Joined per protein: ' + joined.join(';\n    ') + '.'] : []))
     }
 
     // Reference branch

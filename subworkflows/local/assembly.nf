@@ -7,9 +7,11 @@ include { TRANSDECODER   } from '../../modules/local/transdecoder'
 include { METAEUK        } from '../../modules/local/metaeuk'
 include { DIAMOND_BLASTP } from '../../modules/local/diamond_blastp'
 include { EGGNOG_MAPPER  } from '../../modules/local/eggnog_mapper'
+include { EUKULELE       } from '../../modules/local/eukulele'
 include { SALMON_INDEX   } from '../../modules/local/salmon_index'
 include { SALMON_QUANT   } from '../../modules/local/salmon_quant'
 include { MERGE_SALMON   } from '../../modules/local/merge_salmon'
+include { CONTIG_TABLE   } from '../../modules/local/contig_table'
 
 /*
  * Each sample is assembled with every assembler in --assemblers, and samples sharing a samplesheet
@@ -85,20 +87,41 @@ workflow ASSEMBLY {
         ch_pep = ch_pep.mix(METAEUK.out.pep.map { pep -> ['metaeuk', pep] })
     }
 
+    // Annotation per ORF caller, all keyed by caller name: [orf_caller, file]
+    ch_hits     = channel.empty()
+    ch_eggnog   = channel.empty()
+    ch_eukulele = channel.empty()
     if (params.reference_dmnd) {
         DIAMOND_BLASTP(ch_pep, file(params.reference_dmnd, checkIfExists: true))
+        ch_hits = DIAMOND_BLASTP.out.hits
+        // Consensus taxonomy from the top hits (DIAMOND_BLASTP keeps 100 per protein when --eukulele_db is set)
+        if (params.eukulele_db) {
+            EUKULELE(ch_pep.join(ch_hits), file(params.eukulele_db, checkIfExists: true))
+            ch_eukulele = EUKULELE.out.taxonomy
+        }
     }
     if (params.eggnog_data_dir) {
         EGGNOG_MAPPER(ch_pep, file(params.eggnog_data_dir, checkIfExists: true))
+        ch_eggnog = EGGNOG_MAPPER.out.annotations
     }
 
     SALMON_INDEX(MMSEQS_LINCLUST.out.fasta)
     SALMON_QUANT(reads, SALMON_INDEX.out.index)
     MERGE_SALMON(SALMON_QUANT.out.quant.map { _meta, dir -> dir }.collect())
 
+    // One table per contig: representative protein, taxonomy, function, counts
+    ch_annotation_files = ch_pep.mix(ch_hits, ch_eggnog, ch_eukulele).map { _name, f -> f }.collect()
+    CONTIG_TABLE(
+        MERGE_SALMON.out.numreads,
+        ch_annotation_files,
+        params.reference_dmnd && params.reference_taxonomy ? file(params.reference_taxonomy, checkIfExists: true) : [],
+        params.reference_dmnd && params.reference_annotations ? file(params.reference_annotations, checkIfExists: true) : []
+    )
+
     emit:
     contigs = MMSEQS_LINCLUST.out.fasta
     pep     = ch_pep    // [orf_caller, proteins.fa]
     counts  = MERGE_SALMON.out.numreads
     tpm     = MERGE_SALMON.out.tpm
+    table   = CONTIG_TABLE.out.contigs
 }
