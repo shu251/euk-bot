@@ -1,0 +1,4 @@
+sample,fastq_1,fastq_2
+137,/scratch/group/hu-lab/data/axial-2023-euk-metatranscriptome/lane1/137_S1_L006_R1_001.fastq.gz,/scratch/group/hu-lab/data/axial-2023-euk-metatranscriptome/lane1/137_S1_L006_R2_001.fastq.gz
+140,/scratch/group/hu-lab/data/axial-2023-euk-metatranscriptome/lane1/140_S2_L006_R1_001.fastq.gz,/scratch/group/hu-lab/data/axial-2023-euk-metatranscriptome/lane1/140_S2_L006_R2_001.fastq.gz
+144,/scratch/group/hu-lab/data/axial-2023-euk-metatranscriptome/lane1/144_S3_L006_R1_001.fastq.gz,/scratch/group/hu-lab/data/axial-2023-euk-metatranscriptome/lane1/144_S3_L006_R2_001.fastq.gz
