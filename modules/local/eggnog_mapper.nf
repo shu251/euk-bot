@@ -9,7 +9,7 @@ process EGGNOG_MAPPER {
     path(data_dir)
 
     output:
-    path("${name}.emapper.annotations"), emit: annotations
+    tuple val(name), path("${name}.emapper.annotations"), emit: annotations
 
     script:
     """

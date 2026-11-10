@@ -38,6 +38,9 @@ workflow {
         log.warn "--strandedness auto: no protein DB for the strandedness check (--strand_check_dmnd or --reference_dmnd), " +
             "so rnaSPAdes assembles every sample as unstranded"
     }
+    if (assembling && !params.reference_dmnd && (params.eukulele_db || params.reference_annotations)) {
+        log.warn "--eukulele_db and --reference_annotations use the proteins' DIAMOND hits, so they need --reference_dmnd; skipped"
+    }
     writeMethods()
 
     // Rows sharing a sample name (e.g. one per sequencing lane) are concatenated before QC.

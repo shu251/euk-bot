@@ -13,9 +13,13 @@ flowchart LR
     E1 --> E2[MMseqs2 linclust<br/>pool + cluster]
     E2 --> E3[TransDecoder<br/>+ MetaEuk optional]
     E3 --> E4[DIAMOND blastp<br/>+ eggNOG optional]
+    E4 --> E8[EUKulele<br/>consensus taxonomy, optional]
     E2 --> E5[salmon index]
     D --> E6[salmon quant] --> E7[merged count / TPM tables]
     E5 --> E6
+    E4 --> E9[contig table<br/>taxonomy + function + counts]
+    E8 --> E9
+    E7 --> E9
     D --> R1[DIAMOND blastx<br/>vs reference DB] --> R2[best-hit counts<br/>per reference protein]
 ```
 
@@ -32,7 +36,7 @@ conf/
 subworkflows/local/
   preliminary_qc.nf           step 1, Preliminary QC: FastQC, fastp, BBDuk, RiboDetector, BBNorm, MultiQC before/after,
                               per-sample QC table, read-loss check
-  assembly.nf                 assembly -> cluster -> ORFs -> annotation -> salmon
+  assembly.nf                 assembly -> cluster -> ORFs -> annotation (+ EUKulele) -> salmon -> contig table
   assembly_qc.nf              optional per-assembly QC (seqkit, read mapping rate, BUSCO)
   read_screening.nf           step 2, Read screening (optional): strandedness, sourmash, Nonpareil, Kaiju,
                               suggested co-assembly groups
@@ -58,8 +62,10 @@ python3 bin/make_samplesheet.py /path/to/raw-reads -o samplesheet.csv -n 3
 nextflow run main.nf -profile slurm,singularity \
     --input samplesheet.csv \
     --outdir results \
-    --reference_dmnd /path/to/MarFERReT.dmnd \
-    --reference_taxonomy /path/to/MarFERReT_taxonomy.tsv \
+    --reference_dmnd /scratch/group/hu-lab/databases/euk-bot-ref/v1/euk-bot-ref.v1.dmnd \
+    --reference_taxonomy /scratch/group/hu-lab/databases/euk-bot-ref/v1/euk-bot-ref.v1.taxonomy.tsv.gz \
+    --reference_annotations /scratch/group/hu-lab/databases/euk-bot-ref/v1_eggnog/euk-bot-ref.v1.emapper.annotations.tsv.gz \
+    --eukulele_db /scratch/group/hu-lab/databases/euk-bot-ref/v1_eukulele \
     --slurm_account <account> \
     -resume
 ```
@@ -82,6 +88,8 @@ Common switches:
 | `--run_assembly_qc` | `false` | per-assembly contig stats, read mapping rate and (with `--busco_db_dir`) BUSCO, before clustering |
 | `--busco_db_dir` / `--busco_lineages` | none / `eukaryota_odb12` | BUSCO datasets from `download_busco.sbatch` |
 | `--eggnog_data_dir` | none | set it to run eggNOG-mapper on predicted proteins |
+| `--eukulele_db` | none | EUKulele reference folder from `build_eukulele_db.sbatch`; consensus taxonomy (EUKulele, default cutoffs) of the predicted proteins from their DIAMOND hits, which are then kept for the top 100 per protein. Needs `--reference_dmnd` |
+| `--reference_annotations` | none | eggNOG-mapper annotations of the reference proteins (`annotate_reference_db.sbatch`); the contig table gets the eggNOG annotation of each protein's best reference hit, without running eggNOG-mapper on the assembly |
 | `--min_read_length` | `50` | fastp minimum length after trimming |
 | `--max_pct_removed_fastp` | `30` | QC check: if a sample loses more than this % of read pairs in fastp, the run stops after Preliminary QC (when `--min_read_length` > 36) so you can rerun with `--min_read_length 36 -resume`; at 36 or below it only warns |
 | `--trim_mean_quality` | `15` | fastp sliding-window (4 bp) quality trimming, like Trimmomatic `SLIDINGWINDOW:4:15` |
@@ -127,13 +135,36 @@ assembly/qc/                    assembly_qc.tsv: one row per assembly (contig st
 assembly/clustered/             clustered_contigs.fa, clustered_contigs_clusters.tsv (representative, member)
 assembly/transdecoder/          .pep / .cds / .gff3
 assembly/metaeuk/               clustered_contigs.metaeuk.fas (proteins) / .codon.fas / .gff / .headersMap.tsv, with --metaeuk_db
-assembly/annotation/            <transdecoder|metaeuk>.proteins_vs_reference.tsv, <transdecoder|metaeuk>.emapper.annotations
+assembly/annotation/            <orf_caller>.proteins_vs_reference.tsv (DIAMOND outfmt 6, 12 standard columns; best hit,
+                                or top 100 with --eukulele_db), <orf_caller>.emapper.annotations,
+                                <orf_caller>.eukulele_taxonomy.tsv (+ .eukulele_logs/), orf_caller = transdecoder | metaeuk
 assembly/salmon/<sample>/       quant.sf
-assembly/tables/                salmon_numreads.tsv, salmon_tpm.tsv
+assembly/tables/                salmon_numreads.tsv, salmon_tpm.tsv,
+                                contig_table.tsv: one row per clustered contig, see below; protein_table.tsv: one row per protein
 reference/diamond_blastx/       <sample>.blastx.tsv
 reference/tables/               reference_hit_counts.tsv (long: sample, sseqid, n_reads, taxonomy...)
 pipeline_info/                  timeline, report, trace, DAG
 ```
+
+### Contig table
+
+`assembly/tables/contig_table.tsv` (`bin/build_contig_table.py`) has one row per clustered contig (the rows of
+`salmon_numreads.tsv`): `contig`, `length`, `n_proteins`, then the columns of the contig's representative protein,
+then the salmon NumReads of each sample. The representative is the protein with the best reference hit (bitscore),
+then one with an eggNOG annotation, then the longest; `protein_table.tsv` has the same columns for every protein.
+Contigs without a predicted protein are kept with empty annotation. Column groups, each present when its input is:
+
+| Columns | From |
+|---|---|
+| `orf_caller`, `protein_id`, `protein_length` | TransDecoder / MetaEuk |
+| `ref_hit`, `ref_pident`, `ref_evalue`, `ref_bitscore` | best DIAMOND blastp hit (`--reference_dmnd`) |
+| `ref_source`, `ref_organism`, `ref_lineage`, ... | the hit's row in `--reference_taxonomy` |
+| `ref_eggnog_Preferred_name`, `ref_eggnog_KEGG_ko`, ... | the hit's eggNOG annotation (`--reference_annotations`) |
+| `eukulele_classification_level`, `eukulele_classification`, `eukulele_full_classification`, `eukulele_ambiguous` | EUKulele (`--eukulele_db`) |
+| `eggnog_Preferred_name`, `eggnog_KEGG_ko`, ... | eggNOG-mapper on the protein itself (`--eggnog_data_dir`) |
+
+eggNOG columns kept: Preferred_name, Description, COG_category, EC, KEGG_ko, KEGG_Pathway, KEGG_Module, CAZy, PFAMs,
+max_annot_lvl. TPM per contig is in `salmon_tpm.tsv` (same contig IDs).
 
 ## Reference database
 
@@ -156,6 +187,11 @@ A copy of each version's manifest is kept in `assets/reference_db/euk-bot-ref.<v
 `annotate_reference_db.sbatch` runs eggNOG-mapper over a version as a SLURM array (split, run, merge) into
 `<version>_eggnog/` beside it (KEGG KO/pathways, Pfam, COG, GO for every protein with an eggNOG hit).
 `build_metaeuk_db.sbatch` builds the MMseqs2 version of a version's proteins for MetaEuk (`<version>_mmseqs/`, `--metaeuk_db`).
+`build_eukulele_db.sbatch` writes EUKulele's `tax-table.txt` and `prot-map.json` for a version (`<version>_eukulele/`,
+`--eukulele_db`; the proteins and DIAMOND DB are symlinks into the version folder). EUKulele's ranks are Domain,
+Supergroup, Division, Class, Order, Family, Genus, Species: PR2 lineages drop Subdivision, PhyloDB prokaryotes repeat
+Domain as Supergroup (as EUKulele's own PhyloDB table does), and UniEuk lineages (EukProt genera not in PR2; unranked)
+keep only Domain and, where the lineage has a binomial, Genus and Species (see `bin/make_eukulele_db.py`).
 `reference_db_stats.sbatch` writes summary tables for a version (sizes, length distribution, per-organism
 taxonomy, Pfam coverage, and KEGG coverage once the eggNOG annotations exist) to
 `assets/reference_db/euk-bot-ref.<version>.stats/`.
@@ -164,5 +200,4 @@ Eukaryote lineages use PR2 ranks (MarFERReT's PR2 taxonomy; EukProt via PR2 genu
 
 ## TODO / next steps
 
-- Swap in EUKulele for consensus taxonomy on the assembly branch, if preferred.
-- Join `<orf_caller>.proteins_vs_reference.tsv` and the salmon tables into a contig-level taxonomy + function + counts table.
+- Contig table: a contig-level EUKulele consensus across all of a contig's proteins (now: the representative protein's).
