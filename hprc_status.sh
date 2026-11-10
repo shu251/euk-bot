@@ -32,7 +32,9 @@ ENVS=/scratch/group/hu-lab/.cache/euk-bot/conda_envs
     cat "${DB}/phylodb/DATABASE_INFO.txt" 2>&1
     ls -lh "${DB}/phylodb/diamond" 2>&1
     head -c 600 "${DB}/phylodb/prot-map.json"; echo
-    gzip -t "${DB}/phylodb/reference.pep.fa.gz" 2>&1 && echo "gzip test: OK"
+    # phylodb/reference.pep.fa.gz is a known-corrupt old download; the reference DB uses phylodb_1.076/
+    ls -lh "${DB}/phylodb_1.076" 2>&1
+    gzip -t "${DB}/phylodb_1.076/phylodb_1.076.pep.fa.gz" 2>&1 && echo "gzip test (phylodb_1.076): OK"
 
     echo "== eukprot"; ls -lh "${DB}/eukprot_v3" 2>&1
     first=$(find "${DB}/eukprot_v3" -name "*.fasta" 2>/dev/null | head -1)
