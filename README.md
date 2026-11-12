@@ -97,6 +97,7 @@ Common switches:
 | `--skip_normalization` | `false` | BBNorm on the assembler input only (salmon and reference mapping use all clean reads) |
 | `--bbnorm_target` / `--bbnorm_mindepth` | `100` / `2` | BBNorm target k-mer depth; k-mers below mindepth ignored (BBNorm's default 5 drops rare transcripts) |
 | `--metaeuk_db` | none | MMseqs2 DB folder from `build_metaeuk_db.sbatch`; runs MetaEuk next to TransDecoder, both protein sets annotated |
+| `--metaeuk_tmpdir` | task work dir | where MetaEuk writes its temporary files; with the full v1 reference they pass 500 GB, more than personal scratch holds, so point it at group scratch (e.g. `/scratch/group/hu-lab/tmp`). Removed when the task ends |
 | `--skip_rrna_removal` | `false` | |
 | `--ribodetector_read_len` | `150` | set to the sequencing read length |
 | `--ribodetector_chunk_size` | `240` | lower if RiboDetector runs out of memory |
