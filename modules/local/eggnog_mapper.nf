@@ -1,3 +1,5 @@
+// --dbmem loads eggnog.db (~45 GB) into memory for the annotation phase: test3 ran at 8.5 proteins/s without it
+// (1.9M TransDecoder proteins would take ~60 h), vs ~500/s with it in annotate_reference_db.sbatch.
 process EGGNOG_MAPPER {
     tag "${name}"
     label 'process_high'
@@ -17,6 +19,7 @@ process EGGNOG_MAPPER {
         -i ${pep} --itype proteins \\
         --data_dir ${data_dir} \\
         -m diamond \\
+        --dbmem \\
         --cpu ${task.cpus} \\
         -o ${name}
     """

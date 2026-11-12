@@ -18,13 +18,19 @@ process METAEUK {
 
     script:
     def split_mem = Math.max(1, (task.memory.toGiga() * 0.7) as int)
+    // MMseqs2 temporary files reach > 500 GB against the full reference (test3: 33.9M query ORFs x 69M proteins,
+    // filled the 1 TB personal scratch); --metaeuk_tmpdir puts them elsewhere, e.g. group scratch
+    def tmp_root = params.metaeuk_tmpdir ?: '.'
     """
+    mkdir -p ${tmp_root}
+    tmp=\$(mktemp -d ${tmp_root}/metaeuk_tmp.XXXXXX)
+    trap 'rm -rf "\$tmp"' EXIT
+    trap 'exit 143' TERM   # SLURM time limit: exit through the EXIT trap
     db=\$(ls ${db_dir}/*.dbtype | grep -v -e '_h\\.dbtype\$' -e '\\.idx' | head -1)
-    metaeuk easy-predict ${contigs} \${db%.dbtype} ${contigs.baseName}.metaeuk tmp \\
+    metaeuk easy-predict ${contigs} \${db%.dbtype} ${contigs.baseName}.metaeuk \$tmp \\
         --threads ${task.cpus} \\
         -e 100 --metaeuk-eval 0.0001 --min-length 40 \\
         --split-memory-limit ${split_mem}G
-    rm -rf tmp
     """
 
     stub:
