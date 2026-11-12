@@ -259,7 +259,7 @@ def writeMethods() {
             }
             if (params.eggnog_data_dir) {
                 addTool(ctx, 'EGGNOG_MAPPER', 'eggNOG-mapper', [
-                    "emapper.py -m diamond (default sensitivity), data in ${params.eggnog_data_dir};",
+                    "emapper.py -m diamond --dbmem (default sensitivity), data in ${params.eggnog_data_dir};",
                     "${params.metaeuk_db ? 'TransDecoder and MetaEuk proteins annotated separately.' : 'TransDecoder proteins.'}",
                 ])
             }
