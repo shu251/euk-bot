@@ -282,7 +282,7 @@ def writeMethods() {
         ] + (joined ? ['Joined per protein: ' + joined.join(';\n    ') + '.'] : [])
           + (params.reference_dmnd && params.eukulele_db
              ? ['Contig-level EUKulele consensus over all of a contig\'s classified proteins: the deepest rank at which',
-                'more than half of them agree (contig_eukulele_* columns).'] : []))
+                (params.eukulele_consensus == 'lca' ? 'all' : 'more than half') + ' of them agree (contig_eukulele_* columns).'] : []))
     }
 
     // Reference branch

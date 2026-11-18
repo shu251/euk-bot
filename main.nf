@@ -31,6 +31,9 @@ workflow {
     if (!(params.strandedness in ['auto', 'rf', 'fr', 'unstranded'])) {
         error "--strandedness must be auto, rf, fr or unstranded (got '${params.strandedness}')"
     }
+    if (!(params.eukulele_consensus in ['majority', 'lca'])) {
+        error "--eukulele_consensus must be majority or lca (got '${params.eukulele_consensus}')"
+    }
     def strand_db = params.strand_check_dmnd ?: params.reference_dmnd
     def profiling = params.run_read_profiling || params.stop_after_profiling
     def assembling = params.run_assembly && !params.stop_after_profiling
