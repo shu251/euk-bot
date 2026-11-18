@@ -14,6 +14,12 @@ and writes
 The representative protein of a contig is the one with the best reference hit (bitscore), then one with an
 eggNOG annotation, then the longest. Contigs without a predicted protein are kept, with empty annotation.
 
+With EUKulele input, the contig table also has a contig-level consensus over all of the contig's EUKulele-classified
+proteins (contig_eukulele_<column>): walking down the ranks, the consensus keeps the name that more than half of the
+classified proteins agree on (--eukulele-consensus majority) or that all of them do (lca), and stops at the first
+rank where none does. A protein's lineage ends at its first empty rank (EUKulele writes those as 'nan').
+contig_eukulele_support is the fraction of classified proteins that carry the consensus at its deepest rank.
+
 Inputs are recognised by file name:
   *.transdecoder.pep, *.metaeuk.fas      proteins (ORF caller transdecoder / metaeuk)
   <caller>.proteins_vs_reference.tsv     DIAMOND blastp, outfmt 6 (12 standard columns)
@@ -32,6 +38,9 @@ EGGNOG_COLS = ["Preferred_name", "Description", "COG_category", "EC", "KEGG_ko",
                "CAZy", "PFAMs", "max_annot_lvl"]
 EUKULELE_COLS = ["classification_level", "classification", "full_classification", "ambiguous"]
 HIT_COLS = ["ref_hit", "ref_pident", "ref_evalue", "ref_bitscore"]
+EUKULELE_RANKS = ["domain", "supergroup", "division", "class", "order", "family", "genus", "species"]
+CONSENSUS_COLS = ["classification_level", "classification", "full_classification", "support", "n_classified"]
+NO_RANK = {"", "nan", "none", "missingfromtaxdict"}
 TRANSDECODER_SUFFIX = re.compile(r"\.p\d+$")
 
 csv.field_size_limit(sys.maxsize)
@@ -123,6 +132,41 @@ def read_eukulele(path):
         return {row["transcript_name"]: [row.get(c, "") for c in EUKULELE_COLS] for row in reader}
 
 
+def lineage_of(full_classification):
+    """EUKulele full_classification ('A; B; C') -> [A, B, C], cut at the first empty or missing rank."""
+    lineage = []
+    for name in full_classification.split(";"):
+        name = name.strip()
+        if name.lower() in NO_RANK:
+            break
+        lineage.append(name)
+    return lineage
+
+
+def consensus(lineages, mode):
+    """Contig consensus of protein lineages -> CONSENSUS_COLS values ('' when no protein is classified)."""
+    n = len(lineages)
+    if not n:
+        return [""] * len(CONSENSUS_COLS)
+    agreed, support = [], 0
+    for depth in range(max(map(len, lineages))):
+        counts = {}
+        for lineage in lineages:
+            if len(lineage) > depth and lineage[:depth] == agreed:
+                counts[lineage[depth]] = counts.get(lineage[depth], 0) + 1
+        if not counts:
+            break
+        name, count = max(counts.items(), key=lambda kv: kv[1])
+        if not (count == n if mode == "lca" else 2 * count > n):
+            break
+        agreed.append(name)
+        support = count
+    if not agreed:
+        return ["", "", "", f"{support / n:.3g}", n]
+    level = EUKULELE_RANKS[len(agreed) - 1] if len(agreed) <= len(EUKULELE_RANKS) else f"rank{len(agreed)}"
+    return [level, agreed[-1], "; ".join(agreed), f"{support / n:.3g}", n]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("inputs", nargs="+", type=Path, help="protein, hit, eggNOG and EUKulele files (see above)")
@@ -130,6 +174,8 @@ def main():
     parser.add_argument("--taxonomy", type=Path, help="reference taxonomy TSV(.gz), first column = protein ID")
     parser.add_argument("--reference-annotations", type=Path,
                         help="eggNOG-mapper annotations of the reference proteins (.tsv.gz)")
+    parser.add_argument("--eukulele-consensus", choices=["majority", "lca"], default="majority",
+                        help="contig consensus over its proteins' EUKulele lineages (default: majority)")
     parser.add_argument("--prefix", default="", help="output file name prefix")
     args = parser.parse_args()
 
@@ -199,6 +245,7 @@ def main():
 
     best = {}           # contig -> (rank, row)
     n_proteins = {}
+    lineages = {}       # contig -> [EUKulele lineage of each classified protein]
     with open(f"{args.prefix}protein_table.tsv", "w", newline="") as fh:
         writer = csv.writer(fh, delimiter="\t", lineterminator="\n")
         writer.writerow(columns)
@@ -206,22 +253,37 @@ def main():
             row, rank = protein_row(caller, pid, contig, length)
             writer.writerow(row)
             n_proteins[contig] = n_proteins.get(contig, 0) + 1
+            if eukulele:
+                euk = eukulele.get(caller, {}).get(pid)
+                lineage = lineage_of(euk[2]) if euk else []
+                if lineage:
+                    lineages.setdefault(contig, []).append(lineage)
             if contig not in best or rank > best[contig][0]:
                 best[contig] = (rank, row)
 
     rep_columns = [c for c in columns if c != "contig"]
     no_protein = [""] * len(rep_columns)
+    # Contig consensus columns go right after the representative protein's EUKulele columns
+    split = rep_columns.index("eukulele_" + EUKULELE_COLS[-1]) + 1 if eukulele else len(rep_columns)
+    consensus_columns = ["contig_eukulele_" + c for c in CONSENSUS_COLS] if eukulele else []
+    n_consensus = 0
     with open(f"{args.prefix}contig_table.tsv", "w", newline="") as fh:
         writer = csv.writer(fh, delimiter="\t", lineterminator="\n")
-        writer.writerow(["contig", "length", "n_proteins", *rep_columns, *samples])
+        writer.writerow(["contig", "length", "n_proteins", *rep_columns[:split], *consensus_columns,
+                         *rep_columns[split:], *samples])
         for name, row in contigs.items():
             rep = best.get(name)
             rep_values = [v for c, v in zip(columns, rep[1]) if c != "contig"] if rep else no_protein
-            writer.writerow([name, row[1], n_proteins.get(name, 0), *rep_values, *row[2:]])
+            contig_euk = consensus(lineages.get(name, []), args.eukulele_consensus) if eukulele else []
+            n_consensus += bool(contig_euk and contig_euk[0])
+            writer.writerow([name, row[1], n_proteins.get(name, 0), *rep_values[:split], *contig_euk,
+                             *rep_values[split:], *row[2:]])
 
     n_hit = sum(1 for (r, _) in best.values() if r[0] >= 0)
     print(f"contigs: {len(contigs)}; with a protein: {len(best)}; with a reference hit: {n_hit}")
     print(f"proteins: {len(proteins)} ({', '.join(callers)})")
+    if eukulele:
+        print(f"contigs with a EUKulele consensus ({args.eukulele_consensus}): {n_consensus}")
 
 
 if __name__ == "__main__":

@@ -279,7 +279,10 @@ def writeMethods() {
             'assembly/tables/contig_table.tsv: one row per clustered contig with its representative protein',
             '(best reference hit, then eggNOG-annotated, then longest) and NumReads per sample;',
             'assembly/tables/protein_table.tsv: one row per protein.',
-        ] + (joined ? ['Joined per protein: ' + joined.join(';\n    ') + '.'] : []))
+        ] + (joined ? ['Joined per protein: ' + joined.join(';\n    ') + '.'] : [])
+          + (params.reference_dmnd && params.eukulele_db
+             ? ['Contig-level EUKulele consensus over all of a contig\'s classified proteins: the deepest rank at which',
+                'more than half of them agree (contig_eukulele_* columns).'] : []))
     }
 
     // Reference branch

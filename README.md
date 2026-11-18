@@ -162,10 +162,18 @@ Contigs without a predicted protein are kept with empty annotation. Column group
 | `ref_source`, `ref_organism`, `ref_lineage`, ... | the hit's row in `--reference_taxonomy` |
 | `ref_eggnog_Preferred_name`, `ref_eggnog_KEGG_ko`, ... | the hit's eggNOG annotation (`--reference_annotations`) |
 | `eukulele_classification_level`, `eukulele_classification`, `eukulele_full_classification`, `eukulele_ambiguous` | EUKulele (`--eukulele_db`) |
+| `contig_eukulele_classification_level`, `contig_eukulele_classification`, `contig_eukulele_full_classification`, `contig_eukulele_support`, `contig_eukulele_n_classified` | contig table only: consensus of EUKulele over all of the contig's classified proteins (below) |
 | `eggnog_Preferred_name`, `eggnog_KEGG_ko`, ... | eggNOG-mapper on the protein itself (`--eggnog_data_dir`) |
 
 eggNOG columns kept: Preferred_name, Description, COG_category, EC, KEGG_ko, KEGG_Pathway, KEGG_Module, CAZy, PFAMs,
 max_annot_lvl. TPM per contig is in `salmon_tpm.tsv` (same contig IDs).
+
+The contig-level EUKulele consensus walks down the ranks (domain to species) and keeps, at each rank, the name that
+more than half of the contig's classified proteins carry (all of them with `--eukulele-consensus lca`, set through
+`ext.args` of `CONTIG_TABLE`), stopping at the first rank where no name has that support. A protein's lineage ends at
+its first empty rank, so UniEuk-only lineages (Domain, Genus, Species) vote at domain only. `contig_eukulele_support`
+is the fraction of classified proteins carrying the consensus at its deepest rank; proteins from both ORF callers on a
+contig each count.
 
 ## Reference database
 
@@ -201,4 +209,4 @@ Eukaryote lineages use PR2 ranks (MarFERReT's PR2 taxonomy; EukProt via PR2 genu
 
 ## TODO / next steps
 
-- Contig table: a contig-level EUKulele consensus across all of a contig's proteins (now: the representative protein's).
+- (none open)

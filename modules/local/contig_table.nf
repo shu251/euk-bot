@@ -19,8 +19,9 @@ process CONTIG_TABLE {
     script:
     def tax = taxonomy ? "--taxonomy ${taxonomy}" : ''
     def ref = reference_annotations ? "--reference-annotations ${reference_annotations}" : ''
+    def args = task.ext.args ?: ''   // e.g. '--eukulele-consensus lca'
     """
-    build_contig_table.py --numreads ${numreads} ${tax} ${ref} annotation/*
+    build_contig_table.py --numreads ${numreads} ${tax} ${ref} ${args} annotation/*
     """
 
     stub:
