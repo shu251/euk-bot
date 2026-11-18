@@ -89,6 +89,7 @@ Common switches:
 | `--busco_db_dir` / `--busco_lineages` | none / `eukaryota_odb12` | BUSCO datasets from `download_busco.sbatch` |
 | `--eggnog_data_dir` | none | set it to run eggNOG-mapper on predicted proteins |
 | `--eukulele_db` | none | EUKulele reference folder from `build_eukulele_db.sbatch`; consensus taxonomy (EUKulele, default cutoffs) of the predicted proteins from their DIAMOND hits, which are then kept for the top 100 per protein. Needs `--reference_dmnd` |
+| `--eukulele_consensus` | `majority` | contig-level EUKulele consensus over a contig's proteins: `majority` (more than half agree at each rank) or `lca` (all agree); see the contig table below |
 | `--reference_annotations` | none | eggNOG-mapper annotations of the reference proteins (`annotate_reference_db.sbatch`); the contig table gets the eggNOG annotation of each protein's best reference hit, without running eggNOG-mapper on the assembly |
 | `--min_read_length` | `50` | fastp minimum length after trimming |
 | `--max_pct_removed_fastp` | `30` | QC check: if a sample loses more than this % of read pairs in fastp, the run stops after Preliminary QC (when `--min_read_length` > 36) so you can rerun with `--min_read_length 36 -resume`; at 36 or below it only warns |
@@ -169,9 +170,10 @@ eggNOG columns kept: Preferred_name, Description, COG_category, EC, KEGG_ko, KEG
 max_annot_lvl. TPM per contig is in `salmon_tpm.tsv` (same contig IDs).
 
 The contig-level EUKulele consensus walks down the ranks (domain to species) and keeps, at each rank, the name that
-more than half of the contig's classified proteins carry (all of them with `--eukulele-consensus lca`, set through
-`ext.args` of `CONTIG_TABLE`), stopping at the first rank where no name has that support. A protein's lineage ends at
-its first empty rank, so UniEuk-only lineages (Domain, Genus, Species) vote at domain only. `contig_eukulele_support`
+more than half of the contig's classified proteins carry (all of them with `--eukulele_consensus lca`), stopping at
+the first rank where no name has that support. A protein's lineage ends at its first empty rank, so UniEuk-only
+lineages (Domain, Genus, Species) vote at domain only, and PR2's organelle-genome domains (`Eukaryota:nucl`, `:plas`,
+`:mito`) vote as `Eukaryota` (the per-protein `eukulele_*` columns keep them as EUKulele wrote them). `contig_eukulele_support`
 is the fraction of classified proteins carrying the consensus at its deepest rank; proteins from both ORF callers on a
 contig each count.
 

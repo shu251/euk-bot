@@ -17,7 +17,8 @@ eggNOG annotation, then the longest. Contigs without a predicted protein are kep
 With EUKulele input, the contig table also has a contig-level consensus over all of the contig's EUKulele-classified
 proteins (contig_eukulele_<column>): walking down the ranks, the consensus keeps the name that more than half of the
 classified proteins agree on (--eukulele-consensus majority) or that all of them do (lca), and stops at the first
-rank where none does. A protein's lineage ends at its first empty rank (EUKulele writes those as 'nan').
+rank where none does. A protein's lineage ends at its first empty rank (EUKulele writes those as 'nan'), and PR2's
+organelle-genome domains (Eukaryota:nucl, :plas, :mito) count as their domain (Eukaryota) in the vote.
 contig_eukulele_support is the fraction of classified proteins that carry the consensus at its deepest rank.
 
 Inputs are recognised by file name:
@@ -133,12 +134,18 @@ def read_eukulele(path):
 
 
 def lineage_of(full_classification):
-    """EUKulele full_classification ('A; B; C') -> [A, B, C], cut at the first empty or missing rank."""
+    """EUKulele full_classification ('A;B;C') -> [A, B, C], cut at the first empty or missing rank.
+
+    The domain loses a PR2 organelle-genome suffix (Eukaryota:nucl -> Eukaryota), so nucleomorph, plastid and
+    mitochondrial hits vote with the rest of their domain.
+    """
     lineage = []
     for name in full_classification.split(";"):
         name = name.strip()
         if name.lower() in NO_RANK:
             break
+        if not lineage:
+            name = name.split(":", 1)[0]
         lineage.append(name)
     return lineage
 
@@ -164,7 +171,7 @@ def consensus(lineages, mode):
     if not agreed:
         return ["", "", "", f"{support / n:.3g}", n]
     level = EUKULELE_RANKS[len(agreed) - 1] if len(agreed) <= len(EUKULELE_RANKS) else f"rank{len(agreed)}"
-    return [level, agreed[-1], "; ".join(agreed), f"{support / n:.3g}", n]
+    return [level, agreed[-1], ";".join(agreed), f"{support / n:.3g}", n]
 
 
 def main():
