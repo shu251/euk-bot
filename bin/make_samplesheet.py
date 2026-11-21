@@ -3,6 +3,7 @@
 
 Expects bcl2fastq-style names: <sample>_S<n>_L<lane>_R{1,2}_001.fastq.gz.
 Writes one row per lane; the pipeline concatenates lanes that share a sample name.
+Undetermined_* files (reads that did not demultiplex) are skipped: they are not a sample.
 """
 import argparse
 import csv
@@ -24,9 +25,13 @@ def main():
     fastq_dir = args.fastq_dir.resolve()
     rows = []
     problems = []
+    skipped = 0
     for r1 in sorted(fastq_dir.iterdir()):
         match = PATTERN.match(r1.name)
         if not match:
+            continue
+        if match["sample"].lower() == "undetermined":
+            skipped += 1
             continue
         r2 = r1.with_name(r1.name.replace("_R1_001.", "_R2_001."))
         if not r2.exists():
@@ -51,6 +56,8 @@ def main():
         writer.writerows(rows)
 
     print(f"Wrote {args.output}: {len(samples)} samples, {len(rows)} lane pairs", file=sys.stderr)
+    if skipped:
+        print(f"Skipped {skipped} Undetermined lane pair(s)", file=sys.stderr)
 
 
 if __name__ == "__main__":

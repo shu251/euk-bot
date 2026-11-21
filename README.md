@@ -44,6 +44,7 @@ subworkflows/local/
   reference_map.nf            DIAMOND blastx of reads -> hit counts
 modules/local/                one process per tool (conda env + stub block each)
 bin/                          helper scripts (auto-added to PATH by Nextflow)
+tools/project_resources.R     projects time, memory, SUs per step for a new samplesheet from past runs
 assets/samplesheet_example.csv
 tests/                        test samplesheet + toy reads
 ```
@@ -52,7 +53,7 @@ tests/                        test samplesheet + toy reads
 
 Samplesheet (CSV): `sample,fastq_1,fastq_2[,group]`. See `assets/samplesheet_example.csv`. Rows that share a `sample` (e.g. one per lane) are concatenated before QC. The optional `group` column (e.g. vent site or habitat) defines co-assemblies: samples in a group are pooled and co-assembled, in addition to the per-sample assemblies.
 
-Build one from a directory of Illumina `*_S*_L00*_R{1,2}_001.fastq.gz` files (`-n` keeps only the first N samples, for test runs):
+Build one from a directory of Illumina `*_S*_L00*_R{1,2}_001.fastq.gz` files (`-n` keeps only the first N samples, for test runs; `Undetermined_*` files are skipped):
 
 ```bash
 python3 bin/make_samplesheet.py /path/to/raw-reads -o samplesheet.csv -n 3
@@ -120,6 +121,22 @@ nextflow run main.nf -profile test -stub-run
 3. `python3 bin/apply_groups.py read_profile.tsv samplesheet.csv -o samplesheet_grouped.csv` writes `my_group`
    into the samplesheet's `group` column (`--fallback suggested|samplesheet` fills blanks).
 4. Run the full pipeline with that samplesheet and `-resume`, so QC isn't repeated.
+
+## Projecting resources for a new run
+
+`tools/project_resources.R` (base R only) takes the traces of finished runs (`<outdir>/pipeline_info/trace_*.txt`,
+joined to `sacct`) and the raw read pairs of their samples (`qc/preliminary_qc.tsv`), and projects walltime, peak
+memory, SUs and bytes written per step for a new samplesheet. New samples are sized from their fastq.gz sizes, or from a
+`raw_pairs` column. Per-sample steps scale with the sample's raw pairs, pooled steps (clustering, ORFs, annotation)
+with the run's total, using the exponents in the script's `SCALING` table (assumed, not fitted). Steps are flagged when a
+projection would pass the current time or memory request (a retry), the 7-day walltime, or a standard node's memory.
+Only steps seen in a calibration run are projected.
+
+```bash
+module load GCC/14.3.0 R/4.5.2
+Rscript tools/project_resources.R --calib /scratch/user/$USER/euk-bot/test3_v2 \
+    --calib-samplesheet samplesheet_test3.csv --samplesheet samplesheet_full.csv --out projection
+```
 
 ## Outputs (`results/`)
 
