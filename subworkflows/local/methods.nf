@@ -160,7 +160,7 @@ def writeMethods() {
             addStrandedness(ctx, strand_db)
         }
         if (params.kaiju_db) {
-            addTool(ctx, 'KAIJU', 'Kaiju', ["kaiju -a greedy -e 5, read pairs against ${params.kaiju_db}; kaiju2table -r superkingdom."])
+            addTool(ctx, 'KAIJU', 'Kaiju', ["kaiju -a greedy -e 5, read pairs against ${params.kaiju_db}; read assignments rolled up to superkingdom via nodes.dmp (kaiju_superkingdom.sh)."])
             manifestLines(params.kaiju_db, 'downloaded').each { line -> out << "    ${line}" }
         }
         addScript(ctx, 'bin/summarize_read_profile.py', [

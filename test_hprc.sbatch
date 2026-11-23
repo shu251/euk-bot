@@ -14,6 +14,8 @@
 #SBATCH --output=euk-bot-test_%j.log
 #SBATCH --account=132704181195
 #SBATCH --partition=short
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=skhu@tamu.edu
 
 set -uo pipefail
 

@@ -18,7 +18,8 @@ process KAIJU {
     """
     fmi=\$(ls ${db}/*.fmi | head -1)
     kaiju -t ${db}/nodes.dmp -f \$fmi -i ${reads[0]} -j ${reads[1]} -z ${task.cpus} -a greedy -e 5 -o ${meta.id}.kaiju.out
-    kaiju2table -t ${db}/nodes.dmp -n ${db}/names.dmp -r superkingdom -o ${meta.id}.kaiju_superkingdom.tsv ${meta.id}.kaiju.out
+    # kaiju2table 1.10 no longer accepts -r superkingdom; roll up to superkingdom via nodes.dmp instead
+    kaiju_superkingdom.sh ${db}/nodes.dmp ${meta.id}.kaiju.out > ${meta.id}.kaiju_superkingdom.tsv
     rm ${meta.id}.kaiju.out
     """
 
