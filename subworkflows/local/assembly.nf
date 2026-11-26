@@ -12,6 +12,7 @@ include { SALMON_INDEX   } from '../../modules/local/salmon_index'
 include { SALMON_QUANT   } from '../../modules/local/salmon_quant'
 include { MERGE_SALMON   } from '../../modules/local/merge_salmon'
 include { CONTIG_TABLE   } from '../../modules/local/contig_table'
+include { COUNT_TABLES   } from '../../modules/local/count_tables'
 
 /*
  * Each sample is assembled with every assembler in --assemblers, and samples sharing a samplesheet
@@ -117,6 +118,9 @@ workflow ASSEMBLY {
         params.reference_dmnd && params.reference_taxonomy ? file(params.reference_taxonomy, checkIfExists: true) : [],
         params.reference_dmnd && params.reference_annotations ? file(params.reference_annotations, checkIfExists: true) : []
     )
+
+    // Reads (+ CPM) per contig with EUKulele lineage and KO, and summed by taxon / KO / taxon x KO
+    COUNT_TABLES(CONTIG_TABLE.out.contigs, SALMON_QUANT.out.quant.map { _meta, dir -> dir }.collect())
 
     emit:
     contigs = MMSEQS_LINCLUST.out.fasta

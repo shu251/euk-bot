@@ -283,6 +283,15 @@ def writeMethods() {
           + (params.reference_dmnd && params.eukulele_db
              ? ['Contig-level EUKulele consensus over all of a contig\'s classified proteins: the deepest rank at which',
                 (params.eukulele_consensus == 'lca' ? 'all' : 'more than half') + ' of them agree (contig_eukulele_* columns).'] : []))
+        def libs = params.count_libsize.toString().tokenize(',')*.trim() - ['none']
+        addScript(ctx, 'bin/build_count_tables.py', [
+            'assembly/tables/contig_counts.tsv: salmon NumReads per contig with its contig-level EUKulele lineage',
+            '(domain to species) and the KEGG KO of its representative protein\'s eggNOG-mapper annotation;',
+            'reads of a contig with several KOs split evenly between them.',
+            "Long tables summed by KO, by lineage (all ranks, and cut at ${params.count_rank}) and by lineage x KO.",
+        ] + (libs ? ['CPM = reads / library size x 1e6, library size = ' + libs.collect { lib ->
+                lib == 'mapped' ? 'NumReads summed over all contigs (mapped)' : 'read pairs given to salmon (input)'
+            }.join('; ') + '.'] : []))
     }
 
     // Reference branch
