@@ -34,6 +34,14 @@ workflow {
     if (!(params.eukulele_consensus in ['majority', 'lca'])) {
         error "--eukulele_consensus must be majority or lca (got '${params.eukulele_consensus}')"
     }
+    def count_ranks = ['domain', 'supergroup', 'division', 'class', 'order', 'family', 'genus', 'species']
+    if (!(params.count_rank in count_ranks)) {
+        error "--count_rank must be one of ${count_ranks.join(', ')} (got '${params.count_rank}')"
+    }
+    def libsizes = params.count_libsize.toString().tokenize(',')*.trim()
+    if (!(libsizes == ['none'] || (libsizes && (libsizes - ['mapped', 'input']).isEmpty()))) {
+        error "--count_libsize must be mapped, input, mapped,input or none (got '${params.count_libsize}')"
+    }
     def strand_db = params.strand_check_dmnd ?: params.reference_dmnd
     def profiling = params.run_read_profiling || params.stop_after_profiling
     def assembling = params.run_assembly && !params.stop_after_profiling

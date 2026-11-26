@@ -91,6 +91,8 @@ Common switches:
 | `--eggnog_data_dir` | none | set it to run eggNOG-mapper on predicted proteins |
 | `--eukulele_db` | none | EUKulele reference folder from `build_eukulele_db.sbatch`; consensus taxonomy (EUKulele, default cutoffs) of the predicted proteins from their DIAMOND hits, which are then kept for the top 100 per protein. Needs `--reference_dmnd` |
 | `--eukulele_consensus` | `majority` | contig-level EUKulele consensus over a contig's proteins: `majority` (more than half agree at each rank) or `lca` (all agree); see the contig table below |
+| `--count_rank` | `class` | rank the cut count tables stop at (`taxon_counts.<rank>.tsv`, `taxon_ko_counts.<rank>.tsv`); the all-rank tables are always written. See count tables below |
+| `--count_libsize` | `mapped,input` | library size(s) for CPM in the count tables: `mapped` (salmon NumReads summed over all contigs), `input` (read pairs salmon was given, mapped or not), both, or `none` (raw reads only) |
 | `--reference_annotations` | none | eggNOG-mapper annotations of the reference proteins (`annotate_reference_db.sbatch`); the contig table gets the eggNOG annotation of each protein's best reference hit, without running eggNOG-mapper on the assembly |
 | `--min_read_length` | `50` | fastp minimum length after trimming |
 | `--max_pct_removed_fastp` | `30` | QC check: if a sample loses more than this % of read pairs in fastp, the run stops after Preliminary QC (when `--min_read_length` > 36) so you can rerun with `--min_read_length 36 -resume`; at 36 or below it only warns |
@@ -159,7 +161,8 @@ assembly/annotation/            <orf_caller>.proteins_vs_reference.tsv (DIAMOND 
                                 <orf_caller>.eukulele_taxonomy.tsv (+ .eukulele_logs/), orf_caller = transdecoder | metaeuk
 assembly/salmon/<sample>/       quant.sf
 assembly/tables/                salmon_numreads.tsv, salmon_tpm.tsv,
-                                contig_table.tsv: one row per clustered contig, see below; protein_table.tsv: one row per protein
+                                contig_table.tsv: one row per clustered contig, see below; protein_table.tsv: one row per protein;
+                                count tables (contig_counts.tsv, ko_counts.tsv, taxon[_ko]_counts[.<rank>].tsv, library_sizes.tsv), see below
 reference/diamond_blastx/       <sample>.blastx.tsv
 reference/tables/               reference_hit_counts.tsv (long: sample, sseqid, n_reads, taxonomy...)
 pipeline_info/                  timeline, report, trace, DAG
@@ -193,6 +196,28 @@ lineages (Domain, Genus, Species) vote at domain only, and PR2's organelle-genom
 `:mito`) vote as `Eukaryota` (the per-protein `eukulele_*` columns keep them as EUKulele wrote them). `contig_eukulele_support`
 is the fraction of classified proteins carrying the consensus at its deepest rank; proteins from both ORF callers on a
 contig each count.
+
+### Count tables
+
+`bin/build_count_tables.py` turns the contig table into count tables in `assembly/tables/`. Taxonomy is the contig-level
+EUKulele consensus split into `domain`, `supergroup`, `division`, `class`, `order`, `family`, `genus`, `species` (empty
+below the rank the consensus reached; all empty when the contig has none). Function is the KEGG KO of the representative
+protein's own eggNOG-mapper annotation (`eggnog_KEGG_ko`); a contig with several KOs has its reads split evenly
+between them, and one without a KO counts as `unassigned`.
+
+| File | Rows |
+|---|---|
+| `library_sizes.tsv` | per sample: `input_reads` (read pairs salmon was given), `mapped_reads` (NumReads summed), `percent_mapped` |
+| `contig_counts.tsv` | one per contig: taxonomy ranks, `KO`, `n_KO`, eggNOG `Preferred_name` / `Description` / `COG_category`, reads per sample, then `<sample>_cpm_<libsize>` |
+| `ko_counts.tsv` | long: `sample`, `KO`, `reads`, `cpm_<libsize>` |
+| `taxon_counts.tsv`, `taxon_ko_counts.tsv` | long, by the full lineage (all eight ranks) [x KO] |
+| `taxon_counts.<rank>.tsv`, `taxon_ko_counts.<rank>.tsv` | long, lineages cut at `--count_rank` (default class); contigs resolved only above it keep their shorter lineage |
+
+Long tables have only rows with reads > 0. Reads are summed before scaling, so the all-rank tables can be summed to any
+coarser group yourself (reads and CPM both add up). CPM = reads / library size x 10^6: with `mapped` each sample sums to
+10^6 (relative abundance among assembled transcripts); with `input` unmapped reads count too, so a sample that mapped
+poorly to the assembly shows lower values. For differential expression use the raw `reads` (DESeq2 / edgeR normalize
+themselves); TPM per contig stays in `salmon_tpm.tsv` (not summed, since TPM can't be added across contigs).
 
 ## Reference database
 
