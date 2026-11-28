@@ -167,7 +167,7 @@ def main():
         w.writerow(["sample", "input_reads", "mapped_reads", "percent_mapped"])
         for i, s in enumerate(samples):
             pct = 100 * mapped[i] / input_reads[s] if input_reads[s] else 0.0
-            w.writerow([s, input_reads[s], fmt(mapped[i]), f"{pct:.2f}"])
+            w.writerow([s, input_reads[s], f"{mapped[i]:.0f}", f"{pct:.2f}"])
 
     with open(f"{args.prefix}contig_counts.tsv", "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t", lineterminator="\n")

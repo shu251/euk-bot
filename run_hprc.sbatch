@@ -46,6 +46,8 @@ umask 002   # keep shared envs group-writable
 mkdir -p "${NXF_HOME}" "${NXF_CONDA_CACHEDIR}" "${CONDA_PKGS_DIRS}" "${WORK_DIR}"
 
 export NXF_OPTS='-Xms1g -Xmx4g'
+# -resume continues the last run launched from this folder (including stub tests); to continue a specific one,
+# set RESUME_SESSION to its session ID from `nextflow log`, e.g. RESUME_SESSION=5ad773bf-... sbatch run_hprc.sbatch ...
 
 nextflow run main.nf \
     -profile slurm,${PROFILE:-conda} \
@@ -53,5 +55,5 @@ nextflow run main.nf \
     --outdir "${OUTDIR}" \
     --slurm_account "${SLURM_ACCOUNT:-132704181195}" \
     -work-dir "${WORK_DIR}" \
-    -resume \
+    -resume ${RESUME_SESSION:-} \
     "$@"
